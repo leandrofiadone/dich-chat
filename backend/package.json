@@ -2,12 +2,17 @@
   "name": "chat-backend",
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "dev": "npx prisma generate && npx prisma db push && tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "npx prisma generate && tsc",
     "start": "node dist/server.js",
     "lint": "eslint .",
-    "postinstall": "npx prisma generate"
+    "postinstall": "npx prisma generate",
+    "deploy": "npm run build && npm run start"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
