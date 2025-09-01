@@ -50,10 +50,25 @@ router.get("/failure", (_req, res) =>
   res.status(401).json({error: "Auth failed"})
 )
 
-router.post("/logout", (req, res) => {
+// Función helper para logout
+const performLogout = (req: any, res: any) => {
   if (req.logout) {
     req.logout({keepSessionInfo: false}, () => {})
   }
   res.clearCookie("auth_token")
-  res.json({ok: true})
-})
+
+  // Si es una petición GET, redirigir al home
+  if (req.method === "GET") {
+    const origin = process.env.ORIGIN_CORS || "http://localhost:5173"
+    res.redirect(origin)
+  } else {
+    // Si es POST, devolver JSON
+    res.json({ok: true})
+  }
+}
+
+// Logout con GET (para enlaces directos)
+router.get("/logout", performLogout)
+
+// Logout con POST (para llamadas AJAX)
+router.post("/logout", performLogout)
