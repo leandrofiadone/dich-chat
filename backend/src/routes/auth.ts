@@ -1,6 +1,7 @@
 import {Router} from "express"
 import passport from "../auth/google.js"
 import jwt from "jsonwebtoken"
+import {prisma} from "../db.js"
 
 export const router = Router()
 
@@ -17,12 +18,12 @@ if (isGoogleAuthConfigured) {
   router.get(
     "/google/callback",
     passport.authenticate("google", {failureRedirect: "/auth/failure"}),
-    (req, res) => {
+    (req: any, res) => {
       const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
-      const payload = {id: (req.user as any).id}
+      const payload = {id: req.user.id}
       const token = jwt.sign(payload, JWT_SECRET, {expiresIn: "7d"})
 
-      // 🔧 ESTE ES EL FIX PRINCIPAL: Cookies cross-domain
+      // 🔧 Cookies cross-domain
       const isProduction = process.env.NODE_ENV === "production"
 
       res.cookie("auth_token", token, {
@@ -55,15 +56,37 @@ if (isGoogleAuthConfigured) {
   })
 }
 
-router.get("/me", (req, res) => {
-  // 🔍 Debug para ver qué está pasando
+// 🔍 Nueva versión de /me con JWT
+router.get("/me", async (req, res) => {
   console.log("=== AUTH DEBUG ===")
-  console.log("User:", req.user ? "✅ Found" : "❌ Not found")
-  console.log("Cookies:", req.cookies)
-  console.log("Session:", req.session)
-  console.log("==================")
 
-  res.json({user: req.user || null})
+  const token = req.cookies?.auth_token
+  console.log("🔑 Token presente:", token ? "✅ Sí" : "❌ No")
+
+  if (!token) {
+    console.log("⛔ No hay token en cookies")
+    console.log("==================")
+    return res.json({user: null})
+  }
+
+  try {
+    const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
+    const decoded = jwt.verify(token, JWT_SECRET) as {id: string}
+    console.log("🧩 Payload JWT:", decoded)
+
+    const user = await prisma.user.findUnique({
+      where: {id: decoded.id}
+    })
+
+    console.log("👤 Usuario en DB:", user ? user.email : "❌ No encontrado")
+    console.log("==================")
+
+    return res.json({user})
+  } catch (err: any) {
+    console.log("💥 Error al verificar token:", err.message)
+    console.log("==================")
+    return res.json({user: null})
+  }
 })
 
 router.get("/failure", (_req, res) =>
