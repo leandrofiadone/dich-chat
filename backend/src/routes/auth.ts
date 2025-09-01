@@ -22,8 +22,21 @@ if (isGoogleAuthConfigured) {
       const payload = {id: (req.user as any).id}
       const token = jwt.sign(payload, JWT_SECRET, {expiresIn: "7d"})
 
-      res.cookie("auth_token", token, {httpOnly: true, sameSite: "lax"})
-      const origin = process.env.ORIGIN_CORS || "http://localhost:5173"
+      // 🔧 ESTE ES EL FIX PRINCIPAL: Cookies cross-domain
+      const isProduction = process.env.NODE_ENV === "production"
+
+      res.cookie("auth_token", token, {
+        httpOnly: true,
+        secure: isProduction, // true en HTTPS (producción)
+        sameSite: isProduction ? "none" : "lax", // "none" para cross-domain
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 días
+      })
+
+      const origin =
+        process.env.FRONTEND_URL ||
+        process.env.ORIGIN_CORS ||
+        "http://localhost:5173"
+      console.log("🔄 Redirecting after Google auth to:", origin + "/dashboard")
       res.redirect(origin + "/dashboard")
     }
   )
@@ -43,6 +56,13 @@ if (isGoogleAuthConfigured) {
 }
 
 router.get("/me", (req, res) => {
+  // 🔍 Debug para ver qué está pasando
+  console.log("=== AUTH DEBUG ===")
+  console.log("User:", req.user ? "✅ Found" : "❌ Not found")
+  console.log("Cookies:", req.cookies)
+  console.log("Session:", req.session)
+  console.log("==================")
+
   res.json({user: req.user || null})
 })
 
@@ -55,11 +75,21 @@ const performLogout = (req: any, res: any) => {
   if (req.logout) {
     req.logout({keepSessionInfo: false}, () => {})
   }
-  res.clearCookie("auth_token")
+
+  // 🔧 Limpiar cookie con las mismas opciones
+  const isProduction = process.env.NODE_ENV === "production"
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax"
+  })
 
   // Si es una petición GET, redirigir al home
   if (req.method === "GET") {
-    const origin = process.env.ORIGIN_CORS || "http://localhost:5173"
+    const origin =
+      process.env.FRONTEND_URL ||
+      process.env.ORIGIN_CORS ||
+      "http://localhost:5173"
     res.redirect(origin)
   } else {
     // Si es POST, devolver JSON

@@ -69,16 +69,19 @@ app.use(
 app.use(express.json())
 app.use(cookieParser())
 
+// Solo la parte de session que necesitas cambiar en tu app.ts existente:
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "dev-secret",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production", // true solo en producción con HTTPS
+      secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 horas
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax" // 'none' para cross-origin en producción
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // 🔧 ESTE CAMBIO
+      // En producción, también podríamos necesitar domain, pero probemos primero sin él
     }
   })
 )
