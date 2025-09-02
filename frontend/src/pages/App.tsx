@@ -3,10 +3,12 @@ import Chat from "../components/Chat"
 
 export default function App() {
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+    <div
+      className="flex flex-col bg-gray-50 overflow-hidden"
+      style={{height: "100dvh"}}>
       <Header />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden min-h-0">
         <div className="flex-1 mx-auto w-full max-w-4xl bg-white overflow-hidden">
           <Chat />
         </div>
