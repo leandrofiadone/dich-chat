@@ -7,7 +7,7 @@ export default function App() {
       <Header />
 
       <main className="flex-1 flex flex-col min-h-0 p-4">
-        <div className="flex-1 max-w-4xl mx-auto w-full bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex-1 max-w-4xl mx-auto w-full bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden relative z-0">
           <Chat />
         </div>
       </main>

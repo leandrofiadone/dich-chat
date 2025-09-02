@@ -8,7 +8,7 @@ export default function Header() {
   const [soundEnabled, setSoundEnabled] = useState(true)
 
   return (
-    <header className="bg-white border-b border-gray-100 h-16 flex-shrink-0">
+    <header className="bg-white border-b border-gray-100 h-16 flex-shrink-0 relative z-10">
       <div className="max-w-7xl mx-auto px-4 h-full">
         <div className="flex items-center justify-between h-full">
           {/* Logo - Always goes to home/chat */}
@@ -129,7 +129,7 @@ export default function Header() {
 
         {/* Mobile Navigation */}
         <div
-          className={`md:hidden transition-all duration-200 ease-in-out overflow-hidden ${
+          className={`md:hidden transition-all duration-200 ease-in-out overflow-hidden absolute top-16 left-0 w-full bg-white z-20 ${
             isMenuOpen ? "max-h-40 py-3 border-t border-gray-100" : "max-h-0"
           }`}>
           <div className="space-y-3">
