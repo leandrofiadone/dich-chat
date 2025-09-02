@@ -60,16 +60,16 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="h-full flex flex-col">
       {/* Status bar */}
       <div
-        className={`px-4 py-2 text-xs text-center border-b flex-shrink-0 ${
+        className={`px-4 py-2 text-xs text-center flex-shrink-0 ${
           isConnected ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50"
         }`}>
         {isConnected ? "Conectado" : "Desconectado"}
       </div>
 
-      {/* Messages */}
+      {/* Messages - AQUÍ ESTÁ EL SCROLL */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
@@ -120,8 +120,8 @@ export default function Chat() {
         )}
       </div>
 
-      {/* Input */}
-      <div className="border-t p-4 flex-shrink-0">
+      {/* Input - FIJO EN LA PARTE INFERIOR */}
+      <div className="border-t p-4 flex-shrink-0 bg-white">
         {!user ? (
           <div className="text-center">
             <p className="text-gray-500 text-sm mb-3">
