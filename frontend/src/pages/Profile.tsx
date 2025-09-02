@@ -1,4 +1,3 @@
-// Profile.jsx
 import Header from "../components/Header"
 import {useEffect, useState} from "react"
 import {useMe} from "../hooks/useMe"
@@ -24,9 +23,9 @@ export default function Profile() {
 
     try {
       await api.put("/api/users/me", {bio, avatarUrl})
-      setMessage("✅ Perfil actualizado correctamente")
+      setMessage("✓ Perfil actualizado")
     } catch (error) {
-      setMessage("❌ Error al actualizar el perfil")
+      setMessage("✗ Error al actualizar")
     } finally {
       setSaving(false)
       setTimeout(() => setMessage(""), 3000)
@@ -34,99 +33,137 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
       <Header />
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-        <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Mi Perfil
-          </h1>
-          <p className="text-slate-600 mt-2">
-            Personaliza tu información y apariencia
-          </p>
-        </div>
 
-        {!user ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center">
-            <div className="text-amber-600 text-lg font-medium">
-              🔒 Inicia sesión para editar tu perfil
-            </div>
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto p-4 space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Mi Perfil</h1>
+            <p className="text-gray-600 text-sm">Personaliza tu información</p>
           </div>
-        ) : (
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/20 space-y-8">
-            {/* Avatar Section */}
-            <div className="space-y-4">
-              <label className="block text-lg font-semibold text-slate-800">
-                Foto de perfil
-              </label>
-              <div className="flex items-center gap-6">
-                <div className="relative">
-                  <img
-                    src={avatarUrl || "https://placehold.co/100"}
-                    className="w-24 h-24 rounded-2xl object-cover ring-4 ring-white shadow-lg"
-                    alt="Avatar preview"
-                  />
-                  <div className="absolute inset-0 rounded-2xl bg-black/0 hover:bg-black/10 transition-colors cursor-pointer"></div>
-                </div>
-                <div className="flex-1">
-                  <input
-                    type="url"
-                    placeholder="https://ejemplo.com/mi-avatar.jpg"
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    className="w-full rounded-2xl border-2 border-slate-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 px-4 py-3 text-slate-700 placeholder-slate-400 transition-all outline-none"
-                  />
-                  <p className="text-sm text-slate-500 mt-2">
-                    Ingresa la URL de tu imagen de perfil
-                  </p>
-                </div>
+
+          {!user ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+              <div className="text-amber-700">
+                <p className="font-semibold mb-2">Inicio de sesión requerido</p>
+                <p className="text-sm mb-4">
+                  Inicia sesión para editar tu perfil
+                </p>
+                <a
+                  href={`${import.meta.env.VITE_API_URL}/auth/google`}
+                  className="inline-block px-4 py-2 bg-black text-white text-sm rounded">
+                  Iniciar sesión
+                </a>
               </div>
             </div>
-
-            {/* Bio Section */}
-            <div className="space-y-4">
-              <label className="block text-lg font-semibold text-slate-800">
-                Biografía
-              </label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                rows={4}
-                placeholder="Cuéntanos algo sobre ti..."
-                className="w-full rounded-2xl border-2 border-slate-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 p-4 text-slate-700 placeholder-slate-400 transition-all outline-none resize-none"
-              />
-              <p className="text-sm text-slate-500">Máximo 500 caracteres</p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-4">
+          ) : (
+            <div className="space-y-6">
               {message && (
                 <div
-                  className={`px-4 py-2 rounded-xl font-medium ${
-                    message.includes("✅")
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700"
+                  className={`p-3 rounded-lg text-sm transition-all duration-300 ${
+                    message.includes("✓")
+                      ? "bg-green-100 text-green-700 border border-green-200"
+                      : "bg-red-100 text-red-700 border border-red-200"
                   }`}>
                   {message}
                 </div>
               )}
 
-              <button
-                onClick={save}
-                disabled={saving}
-                className="ml-auto px-8 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold hover:from-purple-700 hover:to-pink-700 focus:ring-4 focus:ring-purple-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl">
-                {saving ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    Guardando...
-                  </span>
-                ) : (
-                  "💾 Guardar cambios"
-                )}
-              </button>
+              <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6 hover:shadow-md transition-shadow">
+                {/* Current user info */}
+                <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
+                  <img
+                    src={user.avatarUrl || "https://placehold.co/50"}
+                    className="w-12 h-12 rounded-full transition-transform hover:scale-105"
+                  />
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{user.name}</h2>
+                    <p className="text-gray-600 text-sm break-all">
+                      {user.email}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Avatar section */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Foto de perfil
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={
+                        avatarUrl || user.avatarUrl || "https://placehold.co/60"
+                      }
+                      className="w-12 h-12 rounded-full transition-transform hover:scale-110"
+                      onError={(e) => {
+                        e.currentTarget.src = "https://placehold.co/60"
+                      }}
+                    />
+                    <input
+                      type="url"
+                      placeholder="https://ejemplo.com/avatar.jpg"
+                      value={avatarUrl}
+                      onChange={(e) => setAvatarUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black focus:ring-2 focus:ring-black/5 transition-all"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    URL de tu imagen de perfil
+                  </p>
+                </div>
+
+                {/* Bio section */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Biografía
+                  </label>
+                  <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    rows={4}
+                    maxLength={500}
+                    placeholder="Cuéntanos algo sobre ti..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-black focus:ring-2 focus:ring-black/5 transition-all resize-none"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Comparte tus intereses o profesión</span>
+                    <span className={bio.length > 450 ? "text-amber-600" : ""}>
+                      {bio.length}/500
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setBio(user.bio || "")
+                      setAvatarUrl(user.avatarUrl || "")
+                      setMessage("")
+                    }}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 transition-all duration-200 transform hover:scale-105">
+                    Restaurar
+                  </button>
+
+                  <button
+                    onClick={save}
+                    disabled={saving}
+                    className="px-6 py-2 bg-black text-white text-sm rounded hover:bg-gray-800 disabled:opacity-50 transition-all duration-200 transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+                    {saving ? (
+                      <>
+                        <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin"></div>
+                        Guardando...
+                      </>
+                    ) : (
+                      "Guardar cambios"
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </main>
     </div>
   )
