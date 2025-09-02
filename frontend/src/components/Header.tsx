@@ -1,11 +1,24 @@
-import {Link} from "react-router-dom"
+import {Link, useNavigate} from "react-router-dom"
 import {useMe} from "../hooks/useMe"
 import {useState, useEffect} from "react"
 
 export default function Header() {
   const {user} = useMe()
+  const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
+
+  // Función para manejar navegación y cerrar menú
+  const handleNavigation = (path: string) => {
+    setIsMenuOpen(false)
+    if (path.startsWith("http")) {
+      // Para enlaces externos como logout y login
+      window.location.href = path
+    } else {
+      // Para rutas internas
+      navigate(path)
+    }
+  }
 
   // Cerrar menú móvil al cambiar tamaño de pantalla
   useEffect(() => {
@@ -122,18 +135,26 @@ export default function Header() {
                   <span className="text-sm text-gray-700 font-medium hidden lg:inline max-w-32 truncate">
                     {user.name}
                   </span>
-                  <a
-                    href={`${import.meta.env.VITE_API_URL}/auth/logout`}
+                  <button
+                    onClick={() =>
+                      handleNavigation(
+                        `${import.meta.env.VITE_API_URL}/auth/logout`
+                      )
+                    }
                     className="text-gray-600 hover:text-red-600 transition-colors text-sm font-medium">
                     Salir
-                  </a>
+                  </button>
                 </div>
               ) : (
-                <a
-                  href={`${import.meta.env.VITE_API_URL}/auth/google`}
+                <button
+                  onClick={() =>
+                    handleNavigation(
+                      `${import.meta.env.VITE_API_URL}/auth/google`
+                    )
+                  }
                   className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
                   Entrar
-                </a>
+                </button>
               )}
             </nav>
 
@@ -268,10 +289,9 @@ export default function Header() {
 
             {/* Navigation Links */}
             <nav className="space-y-1">
-              <Link
-                to="/dashboard"
-                className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium"
-                onClick={() => setIsMenuOpen(false)}>
+              <button
+                onClick={() => handleNavigation("/dashboard")}
+                className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium w-full text-left">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -285,12 +305,11 @@ export default function Header() {
                   />
                 </svg>
                 Dashboard
-              </Link>
+              </button>
 
-              <Link
-                to="/profile"
-                className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium"
-                onClick={() => setIsMenuOpen(false)}>
+              <button
+                onClick={() => handleNavigation("/profile")}
+                className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium w-full text-left">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -304,12 +323,11 @@ export default function Header() {
                   />
                 </svg>
                 Perfil
-              </Link>
+              </button>
 
-              <Link
-                to="/"
-                className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium"
-                onClick={() => setIsMenuOpen(false)}>
+              <button
+                onClick={() => handleNavigation("/")}
+                className="flex items-center gap-3 px-3 py-3 text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium w-full text-left">
                 <svg
                   className="w-5 h-5"
                   fill="none"
@@ -323,7 +341,7 @@ export default function Header() {
                   />
                 </svg>
                 Chat
-              </Link>
+              </button>
             </nav>
 
             {/* Auth Section */}
