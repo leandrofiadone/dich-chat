@@ -32,13 +32,11 @@ if (isGoogleAuthConfigured) {
         token ? `${token.substring(0, 30)}...` : "ERROR"
       )
 
-      const isProduction = process.env.NODE_ENV === "production"
-
-      // Mantener cookies para compatibilidad
+      // 🔑 Siempre fijar en producción: SameSite=None; Secure
       res.cookie("auth_token", token, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
+        secure: true, // obligatorio para Safari/iOS
+        sameSite: "none", // obligatorio para Safari/iOS
         maxAge: 7 * 24 * 60 * 60 * 1000
       })
 
@@ -47,12 +45,13 @@ if (isGoogleAuthConfigured) {
         process.env.ORIGIN_CORS ||
         "http://localhost:5173"
 
+      // 🔄 Mandar también como query param (plan B en iOS)
       const redirectUrl = `${origin}/dashboard?auth_token=${token}`
 
       console.log("🌐 Origin configurado:", origin)
       console.log(
         "🔗 URL de redirect completa:",
-        `${origin}/dashboard?auth_token=${token.substring(0, 30)}...`
+        `${redirectUrl.substring(0, 60)}...`
       )
       console.log("🔄 Ejecutando redirect...")
       console.log("=====================================\n")
@@ -143,12 +142,11 @@ const performLogout = (req: any, res: any) => {
     req.logout({keepSessionInfo: false}, () => {})
   }
 
-  // 🔧 Limpiar cookie con las mismas opciones
-  const isProduction = process.env.NODE_ENV === "production"
+  // 🔧 Limpiar cookie con mismas opciones
   res.clearCookie("auth_token", {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax"
+    secure: true,
+    sameSite: "none"
   })
 
   if (req.method === "GET") {
