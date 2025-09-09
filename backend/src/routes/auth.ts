@@ -19,13 +19,22 @@ if (isGoogleAuthConfigured) {
     "/google/callback",
     passport.authenticate("google", {failureRedirect: "/auth/failure"}),
     (req: any, res) => {
+      console.log("\n🎯 === GOOGLE CALLBACK DEBUG ===")
+      console.log("👤 Usuario autenticado:", req.user?.email)
+      console.log("🆔 User ID:", req.user?.id)
+
       const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
       const payload = {id: req.user.id}
       const token = jwt.sign(payload, JWT_SECRET, {expiresIn: "7d"})
 
+      console.log(
+        "🔑 JWT creado:",
+        token ? `${token.substring(0, 30)}...` : "ERROR"
+      )
+
       const isProduction = process.env.NODE_ENV === "production"
 
-      // 🔧 Mantener cookies para compatibilidad (aunque no funcionen en móviles)
+      // Mantener cookies para compatibilidad
       res.cookie("auth_token", token, {
         httpOnly: true,
         secure: isProduction,
@@ -38,11 +47,17 @@ if (isGoogleAuthConfigured) {
         process.env.ORIGIN_CORS ||
         "http://localhost:5173"
 
-      console.log("🔄 Redirecting after Google auth to:", origin + "/dashboard")
+      const redirectUrl = `${origin}/dashboard?auth_token=${token}`
 
-      // 🔧 CAMBIO PRINCIPAL: Pasar token en URL para dispositivos móviles
-      // Esto NO afecta la configuración de Google OAuth, solo cambia a dónde redirigimos
-      res.redirect(`${origin}/dashboard?auth_token=${token}`)
+      console.log("🌐 Origin configurado:", origin)
+      console.log(
+        "🔗 URL de redirect completa:",
+        `${origin}/dashboard?auth_token=${token.substring(0, 30)}...`
+      )
+      console.log("🔄 Ejecutando redirect...")
+      console.log("=====================================\n")
+
+      res.redirect(redirectUrl)
     }
   )
 } else {
@@ -60,15 +75,14 @@ if (isGoogleAuthConfigured) {
   })
 }
 
-// 🔍 Endpoint /me mejorado con soporte JWT
+// 🔍 Nueva versión de /me con JWT
 router.get("/me", async (req, res) => {
-  console.log("=== AUTH DEBUG ===")
+  const timestamp = new Date().toISOString().substring(11, 23)
+  console.log(`\n=== [${timestamp}] AUTH CHECK ===`)
 
-  // 🔧 ORDEN DE PRIORIDAD: Primero cookies (funciona normal), luego JWT header
   let token = req.cookies?.auth_token
   let authSource = "cookie"
 
-  // Solo si NO hay cookie, intentar con Authorization header
   if (!token) {
     const authHeader = req.headers.authorization
     if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -77,52 +91,45 @@ router.get("/me", async (req, res) => {
     }
   }
 
-  console.log("🔑 Token presente:", token ? "✅ Sí" : "❌ No")
-  console.log("🔑 Fuente:", authSource)
+  console.log(
+    `🔑 [${timestamp}] Token: ${token ? "✅ PRESENTE" : "❌ AUSENTE"}`
+  )
+  console.log(`🔑 [${timestamp}] Fuente: ${authSource}`)
+
+  // Detectar dispositivo
+  const userAgent = req.headers["user-agent"] || ""
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent)
+  const isIOS = /iPhone|iPad|iPod/i.test(userAgent)
+  if (isMobile) {
+    console.log(`📱 [${timestamp}] Dispositivo: ${isIOS ? "iOS" : "Android"}`)
+  }
 
   if (!token) {
-    console.log("⛔ No hay token en cookies ni headers")
-    console.log("==================")
+    console.log(`⛔ [${timestamp}] SIN TOKEN - Usuario no autenticado`)
+    console.log("==========================================\n")
     return res.json({user: null})
   }
 
   try {
     const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
     const decoded = jwt.verify(token, JWT_SECRET) as {id: string}
-    console.log("🧩 Payload JWT:", decoded)
 
     const user = await prisma.user.findUnique({
       where: {id: decoded.id}
     })
 
-    console.log("👤 Usuario en DB:", user ? user.email : "❌ No encontrado")
-    console.log("==================")
+    if (user) {
+      console.log(`✅ [${timestamp}] AUTH SUCCESS - ${user.email}`)
+    } else {
+      console.log(`❌ [${timestamp}] USER NOT FOUND - ID: ${decoded.id}`)
+    }
 
-    return res.json({user, authSource}) // Incluir fuente para debugging
+    console.log("==========================================\n")
+    return res.json({user, authSource})
   } catch (err: any) {
-    console.log("💥 Error al verificar token:", err.message)
-    console.log("==================")
+    console.log(`💥 [${timestamp}] TOKEN ERROR: ${err.message}`)
+    console.log("==========================================\n")
     return res.json({user: null})
-  }
-})
-
-// 🔧 NUEVO: Endpoint para obtener JWT manualmente (para casos problemáticos)
-router.post("/get-jwt", async (req, res) => {
-  // Este endpoint solo funciona si ya tienes una sesión válida con cookies
-  const token = req.cookies?.auth_token
-
-  if (!token) {
-    return res.status(401).json({error: "No hay sesión activa"})
-  }
-
-  try {
-    const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
-    const decoded = jwt.verify(token, JWT_SECRET) as {id: string}
-
-    // Devolver el mismo token que ya está en la cookie
-    return res.json({token})
-  } catch (err) {
-    return res.status(401).json({error: "Sesión inválida"})
   }
 })
 
@@ -144,7 +151,6 @@ const performLogout = (req: any, res: any) => {
     sameSite: isProduction ? "none" : "lax"
   })
 
-  // Si es una petición GET, redirigir al home
   if (req.method === "GET") {
     const origin =
       process.env.FRONTEND_URL ||
@@ -152,13 +158,9 @@ const performLogout = (req: any, res: any) => {
       "http://localhost:5173"
     res.redirect(origin)
   } else {
-    // Si es POST, devolver JSON
     res.json({ok: true})
   }
 }
 
-// Logout con GET (para enlaces directos)
 router.get("/logout", performLogout)
-
-// Logout con POST (para llamadas AJAX)
 router.post("/logout", performLogout)

@@ -10,42 +10,46 @@ export function useMe() {
     let mounted = true
 
     const checkAuth = async () => {
+      console.log("\n🔍 === useMe: INICIANDO CHECK AUTH ===")
+
       try {
-        // 🔧 Primer intento: método normal con cookies
         console.log("🍪 Intentando autenticación con cookies...")
         const response = await api.get("/auth/me")
 
         if (mounted) {
           if (response.data.user) {
-            console.log("✅ Autenticación exitosa con cookies")
+            console.log("✅ Autenticación exitosa con cookies/JWT")
+            console.log("👤 Usuario:", response.data.user.email)
+            console.log("🔑 Método:", response.data.authSource)
             setUser(response.data.user)
             setAuthSource(response.data.authSource || "cookie")
           } else {
-            console.log(
-              "❌ Sin usuario con cookies, intentando método alternativo..."
-            )
+            console.log("❌ Sin usuario, intentando método alternativo...")
             await tryJWTAuth()
           }
         }
       } catch (error) {
-        console.log("❌ Error con cookies, intentando método alternativo...")
+        console.log(
+          "❌ Error con auth, intentando método alternativo...",
+          error
+        )
         if (mounted) {
           await tryJWTAuth()
         }
       } finally {
         if (mounted) {
           setLoading(false)
+          console.log("🏁 useMe: Check auth completado")
+          console.log("=======================================\n")
         }
       }
     }
 
     const tryJWTAuth = async () => {
-      // Si hay JWT en localStorage, intentar usarlo
       const savedToken = localStorage.getItem("auth_token")
       if (savedToken) {
         try {
           console.log("🔑 Intentando con JWT guardado...")
-          // Configurar token en header y reintentar
           const response = await api.get("/auth/me", {
             headers: {Authorization: `Bearer ${savedToken}`}
           })
@@ -59,36 +63,6 @@ export function useMe() {
         } catch (error) {
           console.log("❌ JWT inválido, eliminando...")
           localStorage.removeItem("auth_token")
-        }
-      }
-
-      // 🔧 NUEVO: Si estamos en móvil y parece que deberíamos estar logueados,
-      // intentar obtener JWT del backend
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-      if (isMobile && window.location.pathname !== "/") {
-        try {
-          console.log(
-            "📱 Dispositivo móvil detectado, intentando obtener JWT..."
-          )
-          const jwtResponse = await api.post("/auth/get-jwt")
-
-          if (jwtResponse.data.token) {
-            console.log("🔑 JWT obtenido del backend")
-            localStorage.setItem("auth_token", jwtResponse.data.token)
-
-            // Reintentar con el nuevo token
-            const userResponse = await api.get("/auth/me", {
-              headers: {Authorization: `Bearer ${jwtResponse.data.token}`}
-            })
-
-            if (userResponse.data.user) {
-              console.log("✅ Autenticación exitosa con JWT obtenido")
-              setUser(userResponse.data.user)
-              setAuthSource("header")
-            }
-          }
-        } catch (error) {
-          console.log("❌ No se pudo obtener JWT del backend")
         }
       }
     }
