@@ -6,6 +6,21 @@ export function useMe() {
   const [loading, setLoading] = useState(true)
   const [authSource, setAuthSource] = useState<string>("")
 
+  // Capturar token desde la URL y guardarlo en localStorage
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tokenFromURL = params.get("auth_token")
+
+    if (tokenFromURL) {
+      console.log("📥 Token encontrado en URL, guardando en localStorage")
+      localStorage.setItem("auth_token", tokenFromURL)
+
+      // Limpiar la URL sin recargar la página
+      const newUrl = window.location.origin + window.location.pathname
+      window.history.replaceState({}, "", newUrl)
+    }
+  }, [])
+
   useEffect(() => {
     let mounted = true
 
