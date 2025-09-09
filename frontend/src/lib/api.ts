@@ -1,5 +1,3 @@
-// 3. frontend/src/lib/api.ts - Interceptor que solo actúa cuando es necesario
-
 import axios from "axios"
 
 const api = axios.create({

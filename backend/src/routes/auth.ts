@@ -1,5 +1,3 @@
-
-
 import {Router} from "express"
 import passport from "../auth/google.js"
 import jwt from "jsonwebtoken"
@@ -25,22 +23,26 @@ if (isGoogleAuthConfigured) {
       const payload = {id: req.user.id}
       const token = jwt.sign(payload, JWT_SECRET, {expiresIn: "7d"})
 
-      // 🔧 Cookies cross-domain
       const isProduction = process.env.NODE_ENV === "production"
 
+      // 🔧 Mantener cookies para compatibilidad (aunque no funcionen en móviles)
       res.cookie("auth_token", token, {
         httpOnly: true,
-        secure: isProduction, // true en HTTPS (producción)
-        sameSite: isProduction ? "none" : "lax", // "none" para cross-domain
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 días
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000
       })
 
       const origin =
         process.env.FRONTEND_URL ||
         process.env.ORIGIN_CORS ||
         "http://localhost:5173"
+
       console.log("🔄 Redirecting after Google auth to:", origin + "/dashboard")
-      res.redirect(origin + "/dashboard")
+
+      // 🔧 CAMBIO PRINCIPAL: Pasar token en URL para dispositivos móviles
+      // Esto NO afecta la configuración de Google OAuth, solo cambia a dónde redirigimos
+      res.redirect(`${origin}/dashboard?auth_token=${token}`)
     }
   )
 } else {
@@ -58,43 +60,7 @@ if (isGoogleAuthConfigured) {
   })
 }
 
-// 🔍 Nueva versión de /me con JWT
-// router.get("/me", async (req, res) => {
-//   console.log("=== AUTH DEBUG ===")
-
-//   const token = req.cookies?.auth_token
-//   console.log("🔑 Token presente:", token ? "✅ Sí" : "❌ No")
-
-//   if (!token) {
-//     console.log("⛔ No hay token en cookies")
-//     console.log("==================")
-//     return res.json({user: null})
-//   }
-
-//   try {
-//     const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
-//     const decoded = jwt.verify(token, JWT_SECRET) as {id: string}
-//     console.log("🧩 Payload JWT:", decoded)
-
-//     const user = await prisma.user.findUnique({
-//       where: {id: decoded.id}
-//     })
-
-//     console.log("👤 Usuario en DB:", user ? user.email : "❌ No encontrado")
-//     console.log("==================")
-
-//     return res.json({user})
-//   } catch (err: any) {
-//     console.log("💥 Error al verificar token:", err.message)
-//     console.log("==================")
-//     return res.json({user: null})
-//   }
-// })
-
-
-
-
-
+// 🔍 Endpoint /me mejorado con soporte JWT
 router.get("/me", async (req, res) => {
   console.log("=== AUTH DEBUG ===")
 
@@ -159,14 +125,6 @@ router.post("/get-jwt", async (req, res) => {
     return res.status(401).json({error: "Sesión inválida"})
   }
 })
-
-
-
-///////////////////////
-
-
-
-
 
 router.get("/failure", (_req, res) =>
   res.status(401).json({error: "Auth failed"})

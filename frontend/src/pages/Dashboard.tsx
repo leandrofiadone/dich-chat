@@ -1,8 +1,34 @@
 import Header from "../components/Header"
 import {useMe} from "../hooks/useMe"
+import {useEffect} from "react"
 
 export default function Dashboard() {
-  const {user, loading} = useMe()
+  const {user, loading, authSource} = useMe()
+
+  // 🔧 CAPTURAR TOKEN DE URL (después del login de Google)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const token = urlParams.get("auth_token")
+
+    if (token) {
+      console.log(
+        "🔑 Token recibido desde Google OAuth:",
+        token.substring(0, 20) + "..."
+      )
+      localStorage.setItem("auth_token", token)
+
+      // Limpiar URL sin recargar la página
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, document.title, newUrl)
+
+      console.log("💾 Token guardado en localStorage")
+
+      // Recargar para que useMe detecte el nuevo token
+      setTimeout(() => {
+        window.location.reload()
+      }, 100)
+    }
+  }, [])
 
   return (
     <div
@@ -32,6 +58,15 @@ export default function Dashboard() {
             </div>
           ) : user ? (
             <div className="space-y-6">
+              {/* Debug info - Puedes remover en producción */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-green-700 text-sm">
+                  ✅ Autenticación:{" "}
+                  {authSource === "header" ? "JWT (móvil)" : "Cookie (desktop)"}
+                  {localStorage.getItem("auth_token") && " + JWT backup"}
+                </p>
+              </div>
+
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center gap-4">
                   <img

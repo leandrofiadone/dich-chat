@@ -1,5 +1,3 @@
-// 2. frontend/src/hooks/useMe.ts - Hook inteligente que maneja ambos casos
-
 import {useEffect, useState} from "react"
 import api from "../lib/api"
 
