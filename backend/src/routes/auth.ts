@@ -59,14 +59,63 @@ if (isGoogleAuthConfigured) {
 }
 
 // 🔍 Nueva versión de /me con JWT
+// router.get("/me", async (req, res) => {
+//   console.log("=== AUTH DEBUG ===")
+
+//   const token = req.cookies?.auth_token
+//   console.log("🔑 Token presente:", token ? "✅ Sí" : "❌ No")
+
+//   if (!token) {
+//     console.log("⛔ No hay token en cookies")
+//     console.log("==================")
+//     return res.json({user: null})
+//   }
+
+//   try {
+//     const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
+//     const decoded = jwt.verify(token, JWT_SECRET) as {id: string}
+//     console.log("🧩 Payload JWT:", decoded)
+
+//     const user = await prisma.user.findUnique({
+//       where: {id: decoded.id}
+//     })
+
+//     console.log("👤 Usuario en DB:", user ? user.email : "❌ No encontrado")
+//     console.log("==================")
+
+//     return res.json({user})
+//   } catch (err: any) {
+//     console.log("💥 Error al verificar token:", err.message)
+//     console.log("==================")
+//     return res.json({user: null})
+//   }
+// })
+
+
+
+
+
 router.get("/me", async (req, res) => {
   console.log("=== AUTH DEBUG ===")
 
-  const token = req.cookies?.auth_token
+  // 🔧 ORDEN DE PRIORIDAD: Primero cookies (funciona normal), luego JWT header
+  let token = req.cookies?.auth_token
+  let authSource = "cookie"
+
+  // Solo si NO hay cookie, intentar con Authorization header
+  if (!token) {
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7)
+      authSource = "header"
+    }
+  }
+
   console.log("🔑 Token presente:", token ? "✅ Sí" : "❌ No")
+  console.log("🔑 Fuente:", authSource)
 
   if (!token) {
-    console.log("⛔ No hay token en cookies")
+    console.log("⛔ No hay token en cookies ni headers")
     console.log("==================")
     return res.json({user: null})
   }
@@ -83,13 +132,41 @@ router.get("/me", async (req, res) => {
     console.log("👤 Usuario en DB:", user ? user.email : "❌ No encontrado")
     console.log("==================")
 
-    return res.json({user})
+    return res.json({user, authSource}) // Incluir fuente para debugging
   } catch (err: any) {
     console.log("💥 Error al verificar token:", err.message)
     console.log("==================")
     return res.json({user: null})
   }
 })
+
+// 🔧 NUEVO: Endpoint para obtener JWT manualmente (para casos problemáticos)
+router.post("/get-jwt", async (req, res) => {
+  // Este endpoint solo funciona si ya tienes una sesión válida con cookies
+  const token = req.cookies?.auth_token
+
+  if (!token) {
+    return res.status(401).json({error: "No hay sesión activa"})
+  }
+
+  try {
+    const JWT_SECRET = process.env.JWT_SECRET || "dev-jwt"
+    const decoded = jwt.verify(token, JWT_SECRET) as {id: string}
+
+    // Devolver el mismo token que ya está en la cookie
+    return res.json({token})
+  } catch (err) {
+    return res.status(401).json({error: "Sesión inválida"})
+  }
+})
+
+
+
+///////////////////////
+
+
+
+
 
 router.get("/failure", (_req, res) =>
   res.status(401).json({error: "Auth failed"})
