@@ -46,14 +46,15 @@ if (isGoogleAuthConfigured) {
         "http://localhost:5173"
 
       // 🔄 Mandar también como query param (plan B en iOS)
-      const redirectUrl = `${origin}/dashboard?auth_token=${token}`
+      // CAMBIO: Redirigir al chat (/) en lugar del dashboard
+      const redirectUrl = `${origin}/?auth_token=${token}`
 
       console.log("🌐 Origin configurado:", origin)
       console.log(
         "🔗 URL de redirect completa:",
         `${redirectUrl.substring(0, 60)}...`
       )
-      console.log("🔄 Ejecutando redirect...")
+      console.log("🔄 Ejecutando redirect al CHAT...")
       console.log("=====================================\n")
 
       res.redirect(redirectUrl)
