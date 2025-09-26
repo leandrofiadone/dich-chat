@@ -137,27 +137,34 @@ router.get("/failure", (_req, res) =>
   res.status(401).json({error: "Auth failed"})
 )
 
-// Función helper para logout
+// 🔧 FUNCIÓN HELPER PARA LOGOUT CORREGIDA
 const performLogout = (req: any, res: any) => {
+  console.log("\n🚪 === LOGOUT REQUEST ===")
+
   if (req.logout) {
     req.logout({keepSessionInfo: false}, () => {})
   }
 
-  // 🔧 Limpiar cookie con mismas opciones
+  // 🔧 CRÍTICO: Limpiar cookie con EXACTAMENTE las mismas opciones
   res.clearCookie("auth_token", {
     httpOnly: true,
-    secure: true,
-    sameSite: "none"
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    path: "/" // Importante: especificar path
   })
+
+  console.log("🗑️ Cookie auth_token limpiada")
+  console.log("========================\n")
 
   if (req.method === "GET") {
     const origin =
       process.env.FRONTEND_URL ||
       process.env.ORIGIN_CORS ||
       "http://localhost:5173"
+    console.log("🔄 Redirecting to:", origin)
     res.redirect(origin)
   } else {
-    res.json({ok: true})
+    res.json({ok: true, message: "Logged out successfully"})
   }
 }
 

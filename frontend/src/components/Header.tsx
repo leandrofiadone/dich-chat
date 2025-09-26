@@ -1,10 +1,13 @@
 import {Link, useNavigate} from "react-router-dom"
 import {useMe} from "../hooks/useMe"
 import {useState, useEffect} from "react"
+import api from "../lib/api"
 
 export default function Header() {
   const {user} = useMe()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const navigate = useNavigate()
 
   // Cerrar menú móvil al cambiar tamaño de pantalla
   useEffect(() => {
@@ -46,6 +49,37 @@ export default function Header() {
     }
   }, [isMenuOpen])
 
+  // 🔧 FUNCIÓN MEJORADA DE LOGOUT
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsLoggingOut(true)
+
+    try {
+      console.log("🚪 Iniciando logout...")
+
+      // 1. Llamar al endpoint de logout
+      await api.post("/auth/logout")
+
+      // 2. Limpiar localStorage
+      localStorage.removeItem("auth_token")
+
+      // 3. Cerrar menú móvil si está abierto
+      setIsMenuOpen(false)
+
+      console.log("✅ Logout exitoso")
+
+      // 4. Recargar la página para limpiar todo el estado
+      window.location.href = "/"
+    } catch (error) {
+      console.error("❌ Error en logout:", error)
+      // Si falla, al menos limpiar localStorage y recargar
+      localStorage.removeItem("auth_token")
+      window.location.href = "/"
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
     <>
       <header className="bg-white border-b h-14 flex-shrink-0">
@@ -58,16 +92,20 @@ export default function Header() {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-6">
-              <Link
-                to="/dashboard"
-                className="text-gray-600 hover:text-black text-sm">
-                Dashboard
-              </Link>
-              <Link
-                to="/profile"
-                className="text-gray-600 hover:text-black text-sm">
-                Perfil
-              </Link>
+              {user && (
+                <>
+                  <Link
+                    to="/dashboard"
+                    className="text-gray-600 hover:text-black text-sm">
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/profile"
+                    className="text-gray-600 hover:text-black text-sm">
+                    Perfil
+                  </Link>
+                </>
+              )}
 
               {user ? (
                 <div className="flex items-center gap-3">
@@ -79,11 +117,19 @@ export default function Header() {
                   <span className="text-sm text-gray-700 max-w-24 truncate">
                     {user.name}
                   </span>
-                  <a
-                    href={`${import.meta.env.VITE_API_URL}/auth/logout`}
-                    className="text-gray-600 hover:text-red-600 text-sm">
-                    Salir
-                  </a>
+                  <button
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="text-gray-600 hover:text-red-600 text-sm disabled:opacity-50 flex items-center gap-1">
+                    {isLoggingOut ? (
+                      <>
+                        <div className="w-3 h-3 border border-gray-400 border-t-red-600 rounded-full animate-spin"></div>
+                        Saliendo...
+                      </>
+                    ) : (
+                      "Salir"
+                    )}
+                  </button>
                 </div>
               ) : (
                 <a
@@ -148,37 +194,47 @@ export default function Header() {
             )}
 
             {/* Navigation Links */}
-            <div className="space-y-2">
-              <Link
-                to="/dashboard"
-                onClick={() => setIsMenuOpen(false)}
-                className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
-                Dashboard
-              </Link>
+            {user && (
+              <div className="space-y-2">
+                <Link
+                  to="/dashboard"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
+                  Dashboard
+                </Link>
 
-              <Link
-                to="/profile"
-                onClick={() => setIsMenuOpen(false)}
-                className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
-                Perfil
-              </Link>
+                <Link
+                  to="/profile"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
+                  Perfil
+                </Link>
 
-              <Link
-                to="/"
-                onClick={() => setIsMenuOpen(false)}
-                className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
-                Chat
-              </Link>
-            </div>
+                <Link
+                  to="/"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
+                  Chat
+                </Link>
+              </div>
+            )}
 
             {/* Auth */}
             <div className="pt-3 border-t">
               {user ? (
-                <a
-                  href={`${import.meta.env.VITE_API_URL}/auth/logout`}
-                  className="block px-3 py-2 text-red-600 hover:bg-red-50 rounded text-center">
-                  Cerrar sesión
-                </a>
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="w-full px-3 py-2 text-red-600 hover:bg-red-50 rounded text-center disabled:opacity-50 flex items-center justify-center gap-2">
+                  {isLoggingOut ? (
+                    <>
+                      <div className="w-3 h-3 border border-red-400 border-t-red-600 rounded-full animate-spin"></div>
+                      Cerrando sesión...
+                    </>
+                  ) : (
+                    "Cerrar sesión"
+                  )}
+                </button>
               ) : (
                 <a
                   href={`${import.meta.env.VITE_API_URL}/auth/google`}
