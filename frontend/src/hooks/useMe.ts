@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react"
+import {useEffect, useState, useCallback} from "react"
 import api from "../lib/api"
 
 export function useMe() {
@@ -18,6 +18,38 @@ export function useMe() {
       // Limpiar la URL sin recargar la página
       const newUrl = window.location.origin + window.location.pathname
       window.history.replaceState({}, "", newUrl)
+    }
+  }, [])
+
+  // Función para refrescar datos del usuario
+  const refreshUser = useCallback(async () => {
+    console.log("\n🔄 === REFRESH USER ===")
+    setLoading(true)
+
+    try {
+      console.log("🔄 Obteniendo datos actualizados del usuario...")
+      const response = await api.get("/auth/me")
+
+      if (response.data.user) {
+        console.log(
+          "✅ Datos de usuario actualizados:",
+          response.data.user.email
+        )
+        setUser(response.data.user)
+        setAuthSource(response.data.authSource || "cookie")
+      } else {
+        console.log("❌ No se encontró usuario en refresh")
+        setUser(null)
+        setAuthSource("")
+      }
+    } catch (error) {
+      console.error("❌ Error refrescando usuario:", error)
+      setUser(null)
+      setAuthSource("")
+    } finally {
+      setLoading(false)
+      console.log("🔄 Refresh completado")
+      console.log("=====================\n")
     }
   }, [])
 
@@ -89,5 +121,10 @@ export function useMe() {
     }
   }, [])
 
-  return {user, loading, authSource}
+  return {
+    user,
+    loading,
+    authSource,
+    refreshUser // Exportar función de refresh
+  }
 }

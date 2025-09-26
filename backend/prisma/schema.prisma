@@ -1,3 +1,4 @@
+// Verificar que el schema tenga los campos correctos
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,11 +13,11 @@ model User {
   googleId  String   @unique
   email     String   @unique
   name      String
-  avatarUrl String?
-  bio       String?
+  avatarUrl String?  // ✅ Campo opcional para avatar
+  bio       String?  // ✅ Campo opcional para biografía
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt  // ✅ Campo de actualización automática
 
   messages  Message[]
 }
@@ -29,3 +30,7 @@ model Message {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @db.ObjectId
 }
+
+// NOTA: Si el schema cambió, ejecutar:
+// npx prisma generate
+// npx prisma db push
