@@ -100,6 +100,11 @@ export default function Header() {
                     Dashboard
                   </Link>
                   <Link
+                    to="/conversations"
+                    className="text-gray-600 hover:text-black text-sm">
+                    Conversaciones 🧪
+                  </Link>
+                  <Link
                     to="/profile"
                     className="text-gray-600 hover:text-black text-sm">
                     Perfil
@@ -201,6 +206,13 @@ export default function Header() {
                   onClick={() => setIsMenuOpen(false)}
                   className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
                   Dashboard
+                </Link>
+
+                <Link
+                  to="/conversations"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
+                  Conversaciones 🧪
                 </Link>
 
                 <Link

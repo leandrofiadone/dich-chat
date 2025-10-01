@@ -1,9 +1,11 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
-import {createBrowserRouter, RouterProvider, Navigate} from "react-router-dom"
+import {createBrowserRouter, RouterProvider} from "react-router-dom"
 import App from "./pages/App"
 import Dashboard from "./pages/Dashboard"
 import Profile from "./pages/Profile"
+import Conversations from "./pages/Conversations"
+import ChatView from "./pages/ChatView"
 import "./app.css"
 
 // Componente de error para rutas no encontradas
@@ -41,7 +43,16 @@ const router = createBrowserRouter([
     element: <Profile />,
     errorElement: <NotFound />
   },
-  // Catchall para rutas no existentes
+  {
+    path: "/conversations",
+    element: <Conversations />,
+    errorElement: <NotFound />
+  },
+  {
+    path: "/chat/:conversationId",
+    element: <ChatView />,
+    errorElement: <NotFound />
+  },
   {
     path: "*",
     element: <NotFound />
