@@ -79,8 +79,13 @@ export default function ChatView() {
   useEffect(() => {
     if (!conversationId) return
 
+    // ✨ Enviar token al conectarse
+    const token = localStorage.getItem("auth_token")
     const socket = io(import.meta.env.VITE_API_URL, {
-      withCredentials: true
+      withCredentials: true,
+      auth: {
+        token: token // ⭐ Token JWT para autenticación
+      }
     })
     socketRef.current = socket
 
@@ -96,10 +101,17 @@ export default function ChatView() {
       setIsConnected(false)
     })
 
-    // Escuchar mensajes nuevos
+    // Escuchar mensajes nuevos (con deduplicación)
     socket.on("direct-message", (message: DirectMessage) => {
       console.log("📨 Mensaje recibido:", message)
-      setMessages((prev) => [...prev, message])
+      setMessages((prev) => {
+        // ✅ Evitar duplicados: si ya existe, no agregarlo
+        if (prev.some((m) => m.id === message.id)) {
+          console.log("⚠️ Mensaje duplicado ignorado:", message.id)
+          return prev
+        }
+        return [...prev, message]
+      })
     })
 
     return () => {

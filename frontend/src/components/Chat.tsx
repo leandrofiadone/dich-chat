@@ -31,11 +31,31 @@ export default function Chat() {
   }, [])
 
   useEffect(() => {
-    const socket = io(import.meta.env.VITE_API_URL, {withCredentials: true})
+    // ✨ Enviar token al conectarse
+    const token = localStorage.getItem("auth_token")
+    const socket = io(import.meta.env.VITE_API_URL, {
+      withCredentials: true,
+      auth: {
+        token: token // ⭐ Token JWT para autenticación
+      }
+    })
     socketRef.current = socket
 
-    socket.on("connect", () => setIsConnected(true))
-    socket.on("disconnect", () => setIsConnected(false))
+    socket.on("connect", () => {
+      console.log("✅ Socket conectado al muro público")
+      setIsConnected(true)
+    })
+
+    socket.on("disconnect", () => {
+      console.log("❌ Socket desconectado")
+      setIsConnected(false)
+    })
+
+    socket.on("connect_error", (error) => {
+      console.error("❌ Error de conexión:", error.message)
+      setIsConnected(false)
+    })
+
     socket.on("chat:message", (msg: Message) => {
       setMessages((prev) => [...prev, msg])
     })
@@ -48,7 +68,9 @@ export default function Chat() {
   const send = () => {
     if (!user) return alert("Inicia sesión para enviar mensajes")
     if (!text.trim()) return
-    socketRef.current?.emit("chat:message", {userId: user.id, text})
+
+    // ✅ Ya no enviamos userId, el backend lo obtiene del token
+    socketRef.current?.emit("chat:message", {text})
     setText("")
   }
 
@@ -69,7 +91,7 @@ export default function Chat() {
         {isConnected ? "Conectado" : "Desconectado"}
       </div>
 
-      {/* Messages - AQUÍ ESTÁ EL SCROLL */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
@@ -91,6 +113,7 @@ export default function Chat() {
                   <img
                     src={m.user.avatarUrl || "https://placehold.co/32"}
                     className="w-8 h-8 rounded-full flex-shrink-0"
+                    alt={m.user.name}
                   />
                   <div
                     className={`flex flex-col max-w-xs sm:max-w-md ${
@@ -120,7 +143,7 @@ export default function Chat() {
         )}
       </div>
 
-      {/* Input - FIJO EN LA PARTE INFERIOR */}
+      {/* Input */}
       <div className="border-t p-4 flex-shrink-0 bg-white">
         {!user ? (
           <div className="text-center">
