@@ -14,32 +14,26 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
     console.log("👤 Usuario actual:", req.user!.email)
     console.log("👥 Crear conversación con:", otherUserId)
 
-    // Validación: userId es requerido
     if (!otherUserId) {
-      console.log("❌ userId faltante")
       return res.status(400).json({
         error: "userId is required",
         message: "Debes proporcionar el ID del usuario con quien chatear"
       })
     }
 
-    // Validación: no puedes chatear contigo mismo
     if (currentUserId === otherUserId) {
-      console.log("❌ Intento de chatear consigo mismo")
       return res.status(400).json({
         error: "Cannot chat with yourself",
         message: "No puedes crear una conversación contigo mismo"
       })
     }
 
-    // Validación: el otro usuario debe existir
     const otherUser = await prisma.user.findUnique({
       where: {id: otherUserId},
       select: {id: true, name: true, email: true, avatarUrl: true}
     })
 
     if (!otherUser) {
-      console.log("❌ Usuario no encontrado:", otherUserId)
       return res.status(404).json({
         error: "User not found",
         message: "El usuario con el que intentas chatear no existe"
@@ -48,7 +42,6 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
 
     console.log("✅ Usuario encontrado:", otherUser.name)
 
-    // 🔍 Buscar conversación existente entre ambos usuarios
     const existingConversation = await prisma.conversation.findFirst({
       where: {
         AND: [
@@ -64,13 +57,11 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
         existingConversation.id
       )
 
-      // Obtener participantes
       const participants = await prisma.user.findMany({
         where: {id: {in: existingConversation.participantIds}},
         select: {id: true, name: true, email: true, avatarUrl: true, bio: true}
       })
 
-      // Obtener último mensaje
       const lastMessage = await prisma.directMessage.findFirst({
         where: {conversationId: existingConversation.id},
         orderBy: {createdAt: "desc"},
@@ -91,7 +82,6 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
       })
     }
 
-    // 🆕 Crear nueva conversación
     console.log("🆕 Creando nueva conversación...")
     const newConversation = await prisma.conversation.create({
       data: {
@@ -103,7 +93,6 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
     console.log("✅ Conversación creada:", newConversation.id)
     console.log("=====================================\n")
 
-    // Obtener participantes
     const participants = await prisma.user.findMany({
       where: {id: {in: newConversation.participantIds}},
       select: {id: true, name: true, email: true, avatarUrl: true, bio: true}
@@ -125,7 +114,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// 🔐 GET /api/conversations - Listar conversaciones del usuario actual (MEJORADO)
+// 🔐 GET /api/conversations - Listar conversaciones con contador de no leídos
 router.get("/", authenticate, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id
@@ -137,40 +126,52 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
       where: {
         participantIds: {has: userId}
       },
-      orderBy: {lastMessageAt: "desc"},
-      include: {
-        messages: {
-          take: 1,
+      orderBy: {lastMessageAt: "desc"}
+    })
+
+    console.log(`✅ Encontradas ${conversations.length} conversaciones`)
+
+    // Poblar cada conversación con sus datos
+    const conversationsWithData = await Promise.all(
+      conversations.map(async (conv) => {
+        // Participantes
+        const participants = await prisma.user.findMany({
+          where: {id: {in: conv.participantIds}},
+          select: {id: true, name: true, email: true, avatarUrl: true}
+        })
+
+        // Último mensaje
+        const lastMessage = await prisma.directMessage.findFirst({
+          where: {conversationId: conv.id},
           orderBy: {createdAt: "desc"},
           include: {
             sender: {
               select: {id: true, name: true, email: true, avatarUrl: true}
             }
           }
-        }
-      }
-    })
+        })
 
-    console.log(`✅ Encontradas ${conversations.length} conversaciones`)
-
-    // Poblar participantes para cada conversación
-    const conversationsWithParticipants = await Promise.all(
-      conversations.map(async (conv) => {
-        const participants = await prisma.user.findMany({
-          where: {id: {in: conv.participantIds}},
-          select: {id: true, name: true, email: true, avatarUrl: true}
+        // ✨ CONTADOR DE MENSAJES NO LEÍDOS
+        const unreadCount = await prisma.directMessage.count({
+          where: {
+            conversationId: conv.id,
+            receiverId: userId, // Mensajes dirigidos a mí
+            isRead: false // Que no he leído
+          }
         })
 
         return {
           ...conv,
-          participants
+          participants,
+          messages: lastMessage ? [lastMessage] : [],
+          unreadCount // ⭐ Nuevo campo
         }
       })
     )
 
     console.log("=====================================\n")
 
-    res.json(conversationsWithParticipants)
+    res.json(conversationsWithData)
   } catch (error: any) {
     console.error("❌ Error en GET /conversations:", error)
     console.log("=====================================\n")
@@ -181,7 +182,30 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// 🔐 GET /api/conversations/:id - Obtener una conversación específica
+// 🆕 GET /api/conversations/unread-count - Contador total de mensajes no leídos
+router.get("/unread-count", authenticate, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.id
+
+    const unreadCount = await prisma.directMessage.count({
+      where: {
+        receiverId: userId,
+        isRead: false
+      }
+    })
+
+    console.log(
+      `📬 Usuario ${req.user!.email} tiene ${unreadCount} mensajes no leídos`
+    )
+
+    res.json({count: unreadCount})
+  } catch (error: any) {
+    console.error("❌ Error obteniendo contador:", error)
+    res.status(500).json({error: "Failed to get unread count"})
+  }
+})
+
+// 🔐 GET /api/conversations/:id - Obtener conversación y marcar como leída
 router.get("/:id", authenticate, async (req: AuthRequest, res) => {
   try {
     const {id} = req.params
@@ -212,7 +236,6 @@ router.get("/:id", authenticate, async (req: AuthRequest, res) => {
       })
     }
 
-    // Verificar que el usuario sea parte de la conversación
     if (!conversation.participantIds.includes(userId)) {
       console.log("❌ Usuario no autorizado para esta conversación")
       return res.status(403).json({
@@ -225,7 +248,23 @@ router.get("/:id", authenticate, async (req: AuthRequest, res) => {
       `✅ Conversación encontrada con ${conversation.messages.length} mensajes`
     )
 
-    // Obtener participantes
+    // ✨ MARCAR TODOS LOS MENSAJES COMO LEÍDOS
+    const markedAsRead = await prisma.directMessage.updateMany({
+      where: {
+        conversationId: id,
+        receiverId: userId,
+        isRead: false
+      },
+      data: {
+        isRead: true,
+        readAt: new Date()
+      }
+    })
+
+    if (markedAsRead.count > 0) {
+      console.log(`📖 Marcados ${markedAsRead.count} mensajes como leídos`)
+    }
+
     const participants = await prisma.user.findMany({
       where: {id: {in: conversation.participantIds}},
       select: {id: true, name: true, email: true, avatarUrl: true}
@@ -247,7 +286,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// 🔐 POST /api/conversations/:id/messages - Enviar mensaje en una conversación
+// 🔐 POST /api/conversations/:id/messages - Enviar mensaje
 router.post("/:id/messages", authenticate, async (req: AuthRequest, res) => {
   try {
     const {id: conversationId} = req.params
@@ -257,55 +296,47 @@ router.post("/:id/messages", authenticate, async (req: AuthRequest, res) => {
     console.log("\n💬 === ENVIAR MENSAJE ===")
     console.log("👤 Remitente:", req.user!.email)
     console.log("📨 Conversación:", conversationId)
-    console.log("📝 Texto:", text)
 
-    // Validación: texto requerido
     if (!text || !text.trim()) {
-      console.log("❌ Texto vacío")
       return res.status(400).json({
         error: "Text is required",
         message: "El mensaje no puede estar vacío"
       })
     }
 
-    // Verificar que la conversación existe
     const conversation = await prisma.conversation.findUnique({
       where: {id: conversationId}
     })
 
     if (!conversation) {
-      console.log("❌ Conversación no encontrada")
       return res.status(404).json({
         error: "Conversation not found"
       })
     }
 
-    // Verificar que el usuario es parte de la conversación
     if (!conversation.participantIds.includes(senderId)) {
-      console.log("❌ Usuario no autorizado")
       return res.status(403).json({
         error: "Forbidden",
         message: "No eres parte de esta conversación"
       })
     }
 
-    // Obtener el ID del otro participante (receptor)
     const receiverId = conversation.participantIds.find((id) => id !== senderId)
 
     if (!receiverId) {
-      console.log("❌ Receptor no encontrado")
       return res.status(500).json({
         error: "Receiver not found"
       })
     }
 
-    // Crear mensaje
+    // ✨ Crear mensaje con isRead = false por defecto
     const message = await prisma.directMessage.create({
       data: {
         text: text.trim(),
         conversationId,
         senderId,
-        receiverId
+        receiverId,
+        isRead: false // El receptor aún no lo ha leído
       },
       include: {
         sender: {
@@ -314,7 +345,7 @@ router.post("/:id/messages", authenticate, async (req: AuthRequest, res) => {
       }
     })
 
-    // Actualizar lastMessageAt de la conversación
+    // Actualizar lastMessageAt
     await prisma.conversation.update({
       where: {id: conversationId},
       data: {lastMessageAt: new Date()}
@@ -330,6 +361,40 @@ router.post("/:id/messages", authenticate, async (req: AuthRequest, res) => {
     res.status(500).json({
       error: "Failed to send message",
       message: error.message
+    })
+  }
+})
+
+// 🆕 PUT /api/conversations/:id/mark-read - Marcar conversación como leída
+router.put("/:id/mark-read", authenticate, async (req: AuthRequest, res) => {
+  try {
+    const {id} = req.params
+    const userId = req.user!.id
+
+    const updated = await prisma.directMessage.updateMany({
+      where: {
+        conversationId: id,
+        receiverId: userId,
+        isRead: false
+      },
+      data: {
+        isRead: true,
+        readAt: new Date()
+      }
+    })
+
+    console.log(
+      `✅ Marcados ${updated.count} mensajes como leídos en conversación ${id}`
+    )
+
+    res.json({
+      success: true,
+      markedCount: updated.count
+    })
+  } catch (error: any) {
+    console.error("❌ Error marcando como leído:", error)
+    res.status(500).json({
+      error: "Failed to mark as read"
     })
   }
 })

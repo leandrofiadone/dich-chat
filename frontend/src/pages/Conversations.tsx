@@ -22,6 +22,7 @@ type Conversation = {
     createdAt: string
     sender: User
   }>
+  unreadCount?: number // ⭐ Nuevo campo
 }
 
 export default function Conversations() {
@@ -45,7 +46,7 @@ export default function Conversations() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchDebounceRef = useRef<number>()
 
-  // Cargar conversaciones existentes
+  // Cargar conversaciones existentes y refrescar al volver de un chat
   useEffect(() => {
     if (!user) return
 
@@ -62,6 +63,14 @@ export default function Conversations() {
     }
 
     loadConversations()
+
+    // Refrescar cuando se enfoca la ventana (vuelve del chat)
+    const handleFocus = () => {
+      loadConversations()
+    }
+
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
   }, [user])
 
   // Búsqueda con debounce
@@ -359,12 +368,15 @@ export default function Conversations() {
                   (p) => p.id !== user.id
                 )
                 const lastMessage = conv.messages?.[0]
+                const hasUnread = (conv.unreadCount || 0) > 0
 
                 return (
                   <button
                     key={conv.id}
                     onClick={() => navigate(`/chat/${conv.id}`)}
-                    className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors text-left">
+                    className={`w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors text-left ${
+                      hasUnread ? "bg-blue-50/50" : ""
+                    }`}>
                     {/* Avatar */}
                     <div className="relative flex-shrink-0">
                       <img
@@ -372,14 +384,22 @@ export default function Conversations() {
                         className="w-12 h-12 rounded-full"
                         alt={otherUser?.name}
                       />
-                      {/* Indicador online (futuro) */}
-                      {/* <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div> */}
+                      {hasUnread && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-semibold">
+                          {conv.unreadCount! > 9 ? "9+" : conv.unreadCount}
+                        </div>
+                      )}
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="font-semibold text-gray-900 truncate">
+                        <p
+                          className={`truncate ${
+                            hasUnread
+                              ? "font-bold text-gray-900"
+                              : "font-semibold text-gray-900"
+                          }`}>
                           {otherUser?.name || "Usuario"}
                         </p>
                         <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
@@ -387,7 +407,12 @@ export default function Conversations() {
                         </span>
                       </div>
                       {lastMessage ? (
-                        <p className="text-sm text-gray-600 truncate">
+                        <p
+                          className={`text-sm truncate ${
+                            hasUnread
+                              ? "font-medium text-gray-900"
+                              : "text-gray-600"
+                          }`}>
                           {lastMessage.sender.id === user.id && "Tú: "}
                           {lastMessage.text}
                         </p>

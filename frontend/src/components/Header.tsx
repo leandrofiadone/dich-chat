@@ -21,22 +21,24 @@ export default function Header() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  // Cargar contador de conversaciones (futuro: mensajes no leídos)
+  // Cargar contador de mensajes NO LEÍDOS
   useEffect(() => {
     if (!user) return
 
     const loadUnreadCount = async () => {
       try {
-        const response = await api.get("/api/conversations")
-        // Por ahora solo contamos conversaciones totales
-        // En el futuro podrías contar mensajes no leídos
-        setUnreadCount(response.data.length)
+        const response = await api.get("/api/conversations/unread-count")
+        setUnreadCount(response.data.count)
       } catch (error) {
         console.error("Error cargando contador:", error)
       }
     }
 
     loadUnreadCount()
+
+    // Actualizar cada 30 segundos
+    const interval = setInterval(loadUnreadCount, 30000)
+    return () => clearInterval(interval)
   }, [user])
 
   // Cerrar menú al hacer clic fuera
