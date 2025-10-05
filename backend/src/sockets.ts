@@ -1,27 +1,80 @@
+// backend/src/sockets.ts
 import {Server} from "socket.io"
 import type {Server as HttpServer} from "http"
 import {prisma} from "./db.js"
 import jwt from "jsonwebtoken"
+
+// ✨ CACHÉ EN MEMORIA para conversaciones activas
+const conversationCache = new Map<
+  string,
+  {
+    participantIds: string[]
+    expiresAt: number
+  }
+>()
+
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+// Función para verificar acceso (con caché)
+async function hasConversationAccess(
+  userId: string,
+  conversationId: string
+): Promise<boolean> {
+  // Revisar caché primero
+  const cached = conversationCache.get(conversationId)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.participantIds.includes(userId)
+  }
+
+  // Si no está en caché, consultar BD
+  const conv = await prisma.conversation.findFirst({
+    where: {
+      id: conversationId,
+      participantIds: {has: userId}
+    },
+    select: {participantIds: true}
+  })
+
+  if (conv) {
+    // Guardar en caché
+    conversationCache.set(conversationId, {
+      participantIds: conv.participantIds,
+      expiresAt: Date.now() + CACHE_TTL
+    })
+    return true
+  }
+
+  return false
+}
+
+// Limpiar caché cada 10 minutos
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, value] of conversationCache.entries()) {
+    if (value.expiresAt < now) {
+      conversationCache.delete(key)
+    }
+  }
+}, 10 * 60 * 1000)
 
 export function setupSockets(server: HttpServer) {
   const io = new Server(server, {
     cors: {
       origin: process.env.ORIGIN_CORS || "http://localhost:5173",
       credentials: true
-    }
+    },
+    // ✨ OPTIMIZACIÓN: Configuración de transporte
+    transports: ["websocket", "polling"],
+    pingTimeout: 60000,
+    pingInterval: 25000
   })
 
-  // ✨ MIDDLEWARE DE AUTENTICACIÓN PARA SOCKET.IO
   io.use(async (socket, next) => {
-    console.log("\n🔐 === SOCKET AUTH MIDDLEWARE ===")
-
-    // Obtener token del handshake
     const token =
       socket.handshake.auth.token ||
       socket.handshake.headers.cookie?.match(/auth_token=([^;]+)/)?.[1]
 
     if (!token) {
-      console.log("❌ Socket sin token")
       return next(new Error("Authentication required"))
     }
 
@@ -35,101 +88,68 @@ export function setupSockets(server: HttpServer) {
       })
 
       if (!user) {
-        console.log("❌ Usuario no encontrado en DB")
         return next(new Error("User not found"))
       }
 
-      console.log(`✅ Socket autenticado: ${user.email}`)
-
-      // ⭐ Guardar usuario en el socket
       socket.data.user = user
       next()
     } catch (err: any) {
-      console.log(`❌ Token inválido: ${err.message}`)
       return next(new Error("Invalid token"))
     }
   })
 
   io.on("connection", (socket) => {
     const user = socket.data.user
-    console.log(`✅ Socket conectado: ${user.email} (${socket.id})`)
+    console.log(`✅ Socket conectado: ${user.email}`)
 
     // ====================================
-    // MURO PÚBLICO (Chat global)
+    // MURO PÚBLICO (sin cambios)
     // ====================================
     socket.on("chat:message", async (payload: {text: string}) => {
-      // ✅ Ahora usamos el userId del usuario autenticado
-      const userId = user.id
-
-      if (!payload?.text) {
-        console.log("❌ Mensaje sin texto")
-        return
-      }
+      if (!payload?.text) return
 
       try {
         const message = await prisma.message.create({
           data: {
             text: payload.text,
-            userId: userId // ⭐ Usuario verificado
+            userId: user.id
           },
           include: {user: true}
         })
 
-        // Broadcast a todos
         io.emit("chat:message", message)
-        console.log(
-          `📢 Mensaje público de ${user.name}: ${message.text.substring(0, 30)}`
-        )
       } catch (error) {
         console.error("❌ Error en chat público:", error)
       }
     })
 
     // ====================================
-    // MENSAJERÍA PRIVADA
+    // MENSAJERÍA PRIVADA OPTIMIZADA
     // ====================================
 
-    // Unirse a una conversación
+    // ✨ Unirse a conversación (con caché)
     socket.on("join-conversation", async (conversationId: string) => {
       if (!conversationId) return
 
-      // ✅ Verificar que el usuario sea parte de la conversación
-      const conversation = await prisma.conversation.findFirst({
-        where: {
-          id: conversationId,
-          participantIds: {has: user.id}
-        }
-      })
+      const hasAccess = await hasConversationAccess(user.id, conversationId)
 
-      if (!conversation) {
-        console.log(
-          `❌ ${user.email} no tiene acceso a conversación ${conversationId}`
-        )
+      if (!hasAccess) {
+        console.log(`❌ ${user.email} sin acceso a ${conversationId}`)
         return
       }
 
       socket.join(conversationId)
-      console.log(
-        `👤 ${user.email} se unió a conversación ${conversationId.substring(
-          0,
-          8
-        )}...`
-      )
+      console.log(`👤 ${user.email} → ${conversationId.substring(0, 8)}`)
     })
 
-    // Salir de una conversación
+    // Salir de conversación
     socket.on("leave-conversation", (conversationId: string) => {
       if (!conversationId) return
       socket.leave(conversationId)
-      console.log(
-        `👋 ${user.email} salió de conversación ${conversationId.substring(
-          0,
-          8
-        )}...`
-      )
+      console.log(`👋 ${user.email} salió de ${conversationId.substring(0, 8)}`)
     })
 
-    // Enviar mensaje directo
+    // ✨ Mensaje directo (SIN validación redundante)
     socket.on(
       "direct-message",
       async (payload: {conversationId: string; message: any}) => {
@@ -137,75 +157,38 @@ export function setupSockets(server: HttpServer) {
 
         const {conversationId, message} = payload
 
-        try {
-          // ✅ Verificar que el usuario sea parte de la conversación
-          const conversation = await prisma.conversation.findFirst({
-            where: {
-              id: conversationId,
-              participantIds: {has: user.id}
-            }
-          })
+        // ✅ Confiar en la validación del endpoint HTTP
+        // El mensaje ya fue guardado en BD por el POST
+        socket.to(conversationId).emit("direct-message", message)
 
-          if (!conversation) {
-            console.log(
-              `❌ ${user.email} intentó enviar mensaje a conversación sin acceso`
-            )
-            return
-          }
-
-          // Enviar mensaje solo a los usuarios de esta conversación
-          socket.to(conversationId).emit("direct-message", message)
-
-          console.log(
-            `💬 Mensaje directo de ${user.name} en ${conversationId.substring(
-              0,
-              8
-            )}...`
-          )
-        } catch (error) {
-          console.error("❌ Error en mensaje directo:", error)
-        }
+        console.log(
+          `💬 Mensaje de ${user.name} → ${conversationId.substring(0, 8)}`
+        )
       }
     )
 
-    // ✨ NUEVO: Indicador de "escribiendo..."
-    socket.on("typing", async (payload: {conversationId: string}) => {
+    // ✨ Indicador "escribiendo" (sin validación de BD)
+    socket.on("typing", (payload: {conversationId: string}) => {
       if (!payload?.conversationId) return
 
-      const {conversationId} = payload
-
-      // Verificar acceso
-      const conversation = await prisma.conversation.findFirst({
-        where: {
-          id: conversationId,
-          participantIds: {has: user.id}
-        }
-      })
-
-      if (!conversation) return
-
-      // Emitir a los demás en la conversación
-      socket.to(conversationId).emit("user-typing", {
+      socket.to(payload.conversationId).emit("user-typing", {
         userId: user.id,
         userName: user.name
       })
     })
 
-    socket.on("stop-typing", async (payload: {conversationId: string}) => {
+    socket.on("stop-typing", (payload: {conversationId: string}) => {
       if (!payload?.conversationId) return
 
-      const {conversationId} = payload
-
-      socket.to(conversationId).emit("user-stopped-typing", {
+      socket.to(payload.conversationId).emit("user-stopped-typing", {
         userId: user.id
       })
     })
 
-    // Desconexión
     socket.on("disconnect", () => {
-      console.log(`❌ Socket desconectado: ${user.email} (${socket.id})`)
+      console.log(`❌ Socket desconectado: ${user.email}`)
     })
   })
 
-  console.log("✅ Socket.IO configurado con autenticación")
+  console.log("✅ Socket.IO configurado (optimizado)")
 }

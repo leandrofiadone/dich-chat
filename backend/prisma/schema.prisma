@@ -11,7 +11,7 @@ datasource db {
 }
 
 // ============================================
-// MODELO DE USUARIO (Actualizado)
+// MODELO DE USUARIO
 // ============================================
 model User {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -26,13 +26,13 @@ model User {
   // ✅ Relación existente: Mensajes del muro público
   messages  Message[]
   
-  // ✨ NUEVAS RELACIONES para mensajería privada
+  // ✨ Relaciones de mensajería privada
   sentDirectMessages     DirectMessage[] @relation("SentMessages")
   receivedDirectMessages DirectMessage[] @relation("ReceivedMessages")
 }
 
 // ============================================
-// MENSAJES DEL MURO PÚBLICO (Sin cambios)
+// MENSAJES DEL MURO PÚBLICO
 // ============================================
 model Message {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -41,34 +41,31 @@ model Message {
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @db.ObjectId
+  
+  @@index([createdAt(sort: Desc)]) // ← Para cargar mensajes recientes del muro
 }
 
 // ============================================
-// ✨ NUEVOS MODELOS: MENSAJERÍA PRIVADA
+// ✨ MENSAJERÍA PRIVADA (OPTIMIZADA)
 // ============================================
 
-// Conversación entre usuarios (1-a-1 o grupos futuros)
 model Conversation {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  // Timestamp del último mensaje (para ordenar conversaciones)
   lastMessageAt DateTime @default(now())
   
-  // 🔧 CORREGIDO: En MongoDB, many-to-many se hace con array de IDs
-  // NO usar fields/references en relaciones implícitas
+  // ✅ Array de IDs de participantes (MongoDB way)
   participantIds String[] @db.ObjectId
   
   // Mensajes dentro de esta conversación
   messages DirectMessage[]
   
-  // Índices para optimizar queries
-  @@index([lastMessageAt])
-  @@index([participantIds])
+  // ✨ ÍNDICES OPTIMIZADOS
+  @@index([participantIds, lastMessageAt(sort: Desc)])
+  @@index([lastMessageAt(sort: Desc)])
 }
 
-// Mensaje directo (dentro de una conversación)
 model DirectMessage {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   text      String
@@ -82,28 +79,31 @@ model DirectMessage {
   sender   User   @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   senderId String @db.ObjectId
   
-  // Quién recibe el mensaje (para queries rápidas)
+  // Quién recibe el mensaje
   receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
   receiverId String @db.ObjectId
   
-  // Estado de lectura (para futuras features)
+  // Estado de lectura
   isRead Boolean  @default(false)
   readAt DateTime?
   
-  // Índices para optimizar queries
-  @@index([conversationId, createdAt])
-  @@index([senderId])
-  @@index([receiverId])
+  // ✨ ÍNDICES COMPUESTOS PARA PERFORMANCE
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([receiverId, isRead])
+  @@index([conversationId, receiverId, isRead])
+  @@index([senderId, createdAt(sort: Desc)])
 }
 
 // ============================================
-// NOTAS IMPORTANTES
+// NOTAS SOBRE LOS ÍNDICES
 // ============================================
-// 1. Message = Muro público (sin cambios)
-// 2. DirectMessage = Mensajes privados (nuevo)
-// 3. Conversation = Agrupa mensajes privados entre usuarios
-// 4. participantIds permite buscar conversaciones eficientemente
-// 5. lastMessageAt permite ordenar conversaciones por actividad
+// 1. Message: Índice en createdAt para queries del muro
+// 2. Conversation: Índices para buscar conversaciones del usuario
+// 3. DirectMessage: Múltiples índices para:
+//    - Cargar mensajes de una conversación ordenados
+//    - Contar mensajes no leídos por usuario
+//    - Marcar conversaciones como leídas
+//    - Queries de mensajes enviados por usuario
 //
 // Ejecutar después de guardar:
 // npx prisma generate
