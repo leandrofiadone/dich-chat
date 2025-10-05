@@ -1,4 +1,4 @@
-import {Link, useNavigate} from "react-router-dom"
+import {Link} from "react-router-dom"
 import {useMe} from "../hooks/useMe"
 import {useState, useEffect} from "react"
 import api from "../lib/api"
@@ -7,7 +7,7 @@ export default function Header() {
   const {user} = useMe()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const navigate = useNavigate()
+  const [unreadCount, setUnreadCount] = useState(0)
 
   // Cerrar menú móvil al cambiar tamaño de pantalla
   useEffect(() => {
@@ -20,6 +20,24 @@ export default function Header() {
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [])
+
+  // Cargar contador de conversaciones (futuro: mensajes no leídos)
+  useEffect(() => {
+    if (!user) return
+
+    const loadUnreadCount = async () => {
+      try {
+        const response = await api.get("/api/conversations")
+        // Por ahora solo contamos conversaciones totales
+        // En el futuro podrías contar mensajes no leídos
+        setUnreadCount(response.data.length)
+      } catch (error) {
+        console.error("Error cargando contador:", error)
+      }
+    }
+
+    loadUnreadCount()
+  }, [user])
 
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
@@ -49,30 +67,17 @@ export default function Header() {
     }
   }, [isMenuOpen])
 
-  // 🔧 FUNCIÓN MEJORADA DE LOGOUT
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault()
     setIsLoggingOut(true)
 
     try {
-      console.log("🚪 Iniciando logout...")
-
-      // 1. Llamar al endpoint de logout
       await api.post("/auth/logout")
-
-      // 2. Limpiar localStorage
       localStorage.removeItem("auth_token")
-
-      // 3. Cerrar menú móvil si está abierto
       setIsMenuOpen(false)
-
-      console.log("✅ Logout exitoso")
-
-      // 4. Recargar la página para limpiar todo el estado
       window.location.href = "/"
     } catch (error) {
       console.error("❌ Error en logout:", error)
-      // Si falla, al menos limpiar localStorage y recargar
       localStorage.removeItem("auth_token")
       window.location.href = "/"
     } finally {
@@ -86,7 +91,9 @@ export default function Header() {
         <div className="max-w-6xl mx-auto px-4 h-full">
           <div className="flex items-center justify-between h-full">
             {/* Logo */}
-            <Link to="/" className="font-bold text-lg">
+            <Link
+              to="/"
+              className="font-bold text-lg hover:text-gray-700 transition-colors">
               dich-chat
             </Link>
 
@@ -96,17 +103,25 @@ export default function Header() {
                 <>
                   <Link
                     to="/dashboard"
-                    className="text-gray-600 hover:text-black text-sm">
+                    className="text-gray-600 hover:text-black text-sm transition-colors">
                     Dashboard
                   </Link>
+
+                  {/* Mensajes con badge */}
                   <Link
                     to="/conversations"
-                    className="text-gray-600 hover:text-black text-sm">
-                    Conversaciones 🧪
+                    className="text-gray-600 hover:text-black text-sm transition-colors relative">
+                    Mensajes
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-3 bg-blue-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
                   </Link>
+
                   <Link
                     to="/profile"
-                    className="text-gray-600 hover:text-black text-sm">
+                    className="text-gray-600 hover:text-black text-sm transition-colors">
                     Perfil
                   </Link>
                 </>
@@ -125,7 +140,7 @@ export default function Header() {
                   <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}
-                    className="text-gray-600 hover:text-red-600 text-sm disabled:opacity-50 flex items-center gap-1">
+                    className="text-gray-600 hover:text-red-600 text-sm disabled:opacity-50 flex items-center gap-1 transition-colors">
                     {isLoggingOut ? (
                       <>
                         <div className="w-3 h-3 border border-gray-400 border-t-red-600 rounded-full animate-spin"></div>
@@ -139,7 +154,7 @@ export default function Header() {
               ) : (
                 <a
                   href={`${import.meta.env.VITE_API_URL}/auth/google`}
-                  className="px-3 py-1.5 bg-black text-white text-sm rounded">
+                  className="px-3 py-1.5 bg-black text-white text-sm rounded hover:bg-gray-800 transition-colors">
                   Entrar
                 </a>
               )}
@@ -149,8 +164,12 @@ export default function Header() {
             <button
               id="mobile-menu-button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="md:hidden p-2"
+              className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
               aria-label="Menú">
+              {/* Badge en botón móvil */}
+              {user && unreadCount > 0 && (
+                <span className="absolute top-1 right-1 bg-blue-600 w-2 h-2 rounded-full"></span>
+              )}
               <svg
                 className="w-5 h-5"
                 fill="none"
@@ -202,31 +221,36 @@ export default function Header() {
             {user && (
               <div className="space-y-2">
                 <Link
+                  to="/"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
+                  Chat
+                </Link>
+
+                <Link
                   to="/dashboard"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
                   Dashboard
                 </Link>
 
                 <Link
                   to="/conversations"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
-                  Conversaciones 🧪
+                  className="flex items-center justify-between px-3 py-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
+                  <span>Mensajes</span>
+                  {unreadCount > 0 && (
+                    <span className="bg-blue-600 text-white text-xs rounded-full px-2 py-0.5">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
 
                 <Link
                   to="/profile"
                   onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
+                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded transition-colors">
                   Perfil
-                </Link>
-
-                <Link
-                  to="/"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="block px-3 py-2 text-gray-700 hover:bg-gray-50 rounded">
-                  Chat
                 </Link>
               </div>
             )}
@@ -237,7 +261,7 @@ export default function Header() {
                 <button
                   onClick={handleLogout}
                   disabled={isLoggingOut}
-                  className="w-full px-3 py-2 text-red-600 hover:bg-red-50 rounded text-center disabled:opacity-50 flex items-center justify-center gap-2">
+                  className="w-full px-3 py-2 text-red-600 hover:bg-red-50 rounded text-center disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
                   {isLoggingOut ? (
                     <>
                       <div className="w-3 h-3 border border-red-400 border-t-red-600 rounded-full animate-spin"></div>
@@ -250,7 +274,7 @@ export default function Header() {
               ) : (
                 <a
                   href={`${import.meta.env.VITE_API_URL}/auth/google`}
-                  className="block px-3 py-2 bg-black text-white rounded text-center">
+                  className="block px-3 py-2 bg-black text-white rounded text-center hover:bg-gray-800 transition-colors">
                   Iniciar sesión
                 </a>
               )}

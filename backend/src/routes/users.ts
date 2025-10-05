@@ -5,7 +5,7 @@ import {authenticate, AuthRequest} from "../middleware/auth.js"
 
 export const router = Router()
 
-// Esquema de validación más permisivo para debugging
+// Esquema de validación
 const BioSchema = z.object({
   bio: z
     .string()
@@ -61,6 +61,71 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
   }
 })
 
+// 🆕 BÚSQUEDA DE USUARIOS (nuevo endpoint)
+router.get("/search", authenticate, async (req: AuthRequest, res) => {
+  try {
+    const {q} = req.query
+    const currentUserId = req.user!.id
+
+    console.log("\n🔍 === SEARCH USERS ===")
+    console.log("👤 Usuario buscando:", req.user!.email)
+    console.log("🔎 Query:", q)
+
+    // Validar que haya query
+    if (!q || typeof q !== "string" || q.trim().length < 2) {
+      return res.json([])
+    }
+
+    const searchTerm = q.trim().toLowerCase()
+
+    // Buscar usuarios que coincidan con nombre o email
+    const users = await prisma.user.findMany({
+      where: {
+        AND: [
+          {
+            id: {not: currentUserId} // Excluir al usuario actual
+          },
+          {
+            OR: [
+              {
+                name: {
+                  contains: searchTerm,
+                  mode: "insensitive"
+                }
+              },
+              {
+                email: {
+                  contains: searchTerm,
+                  mode: "insensitive"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        bio: true
+      },
+      take: 10 // Limitar a 10 resultados
+    })
+
+    console.log(`✅ Encontrados ${users.length} usuarios`)
+    console.log("=======================\n")
+
+    res.json(users)
+  } catch (error: any) {
+    console.error("❌ Error en búsqueda:", error)
+    res.status(500).json({
+      error: "Search failed",
+      message: error.message
+    })
+  }
+})
+
 // 🔐 RUTA PROTEGIDA: Obtener perfil de otro usuario por ID
 router.get("/:id", async (req, res) => {
   try {
@@ -90,7 +155,7 @@ router.get("/:id", async (req, res) => {
   }
 })
 
-// 🔐 RUTA PROTEGIDA: Actualizar perfil del usuario actual (CON DEBUGGING COMPLETO)
+// 🔐 RUTA PROTEGIDA: Actualizar perfil del usuario actual
 router.put("/me", authenticate, async (req: AuthRequest, res) => {
   const timestamp = new Date().toISOString().substring(11, 23)
 
@@ -98,12 +163,7 @@ router.put("/me", authenticate, async (req: AuthRequest, res) => {
     console.log(`\n💾 === [${timestamp}] PUT /api/users/me ===`)
     console.log("👤 Usuario:", req.user?.email)
     console.log("📝 Body original:", JSON.stringify(req.body, null, 2))
-    console.log("🔍 Headers:", {
-      "content-type": req.headers["content-type"],
-      authorization: req.headers.authorization ? "Bearer xxx..." : "None"
-    })
 
-    // Validación
     const parse = BioSchema.safeParse(req.body)
     if (!parse.success) {
       console.error("❌ Validación fallida:", parse.error.flatten())
@@ -115,20 +175,16 @@ router.put("/me", authenticate, async (req: AuthRequest, res) => {
 
     console.log("✅ Datos validados:", JSON.stringify(parse.data, null, 2))
 
-    // Preparar datos para actualización (SOLO campos que cambiaron)
     const updateData: any = {}
 
     if (parse.data.bio !== undefined) {
       updateData.bio = parse.data.bio
-      console.log(`📝 Bio a actualizar: "${parse.data.bio}"`)
     }
 
     if (parse.data.avatarUrl !== undefined) {
       updateData.avatarUrl = parse.data.avatarUrl
-      console.log(`🖼️ Avatar a actualizar: "${parse.data.avatarUrl}"`)
     }
 
-    // Si no hay nada que actualizar
     if (Object.keys(updateData).length === 0) {
       console.log("⚠️ No hay cambios para guardar")
       return res.status(400).json({
@@ -136,31 +192,6 @@ router.put("/me", authenticate, async (req: AuthRequest, res) => {
         message: "No fields provided for update"
       })
     }
-
-    console.log(
-      "🔄 Datos finales para update:",
-      JSON.stringify(updateData, null, 2)
-    )
-
-    // Verificar que el usuario existe antes de actualizar
-    const existingUser = await prisma.user.findUnique({
-      where: {id: req.user!.id}
-    })
-
-    if (!existingUser) {
-      console.log("❌ Usuario no existe en DB:", req.user!.id)
-      return res.status(404).json({error: "User not found"})
-    }
-
-    console.log("👤 Usuario actual en DB:", {
-      id: existingUser.id,
-      email: existingUser.email,
-      bio: existingUser.bio,
-      avatarUrl: existingUser.avatarUrl
-    })
-
-    // Actualizar usuario
-    console.log("🔄 Ejecutando prisma.user.update...")
 
     const updated = await prisma.user.update({
       where: {id: req.user!.id},
@@ -175,8 +206,7 @@ router.put("/me", authenticate, async (req: AuthRequest, res) => {
       }
     })
 
-    console.log("✅ Usuario actualizado exitosamente:")
-    console.log("📊 Resultado:", JSON.stringify(updated, null, 2))
+    console.log("✅ Usuario actualizado exitosamente")
     console.log("=======================================\n")
 
     res.json({
@@ -187,12 +217,6 @@ router.put("/me", authenticate, async (req: AuthRequest, res) => {
     })
   } catch (error: any) {
     console.error(`❌ [${timestamp}] Error actualizando perfil:`, error)
-    console.error("📊 Error details:", {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      stack: error.stack?.split("\n")[0]
-    })
     console.log("=======================================\n")
 
     if (error.code === "P2025") {
@@ -223,20 +247,17 @@ if (process.env.NODE_ENV !== "production") {
     try {
       console.log("\n🔍 === DEBUG USER ===")
 
-      // Información del token
       console.log("🔑 Token info:", {
         userId: req.user?.id,
         email: req.user?.email
       })
 
-      // Usuario en base de datos
       const dbUser = await prisma.user.findUnique({
         where: {id: req.user!.id}
       })
 
       console.log("🗄️ Usuario en DB:", dbUser)
 
-      // Contar usuarios total
       const userCount = await prisma.user.count()
       console.log("📊 Total usuarios en DB:", userCount)
 

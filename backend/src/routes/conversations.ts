@@ -125,7 +125,7 @@ router.post("/", authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// 🔐 GET /api/conversations - Listar conversaciones del usuario actual
+// 🔐 GET /api/conversations - Listar conversaciones del usuario actual (MEJORADO)
 router.get("/", authenticate, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id
@@ -141,7 +141,12 @@ router.get("/", authenticate, async (req: AuthRequest, res) => {
       include: {
         messages: {
           take: 1,
-          orderBy: {createdAt: "desc"}
+          orderBy: {createdAt: "desc"},
+          include: {
+            sender: {
+              select: {id: true, name: true, email: true, avatarUrl: true}
+            }
+          }
         }
       }
     })
