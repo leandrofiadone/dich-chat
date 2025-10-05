@@ -22,8 +22,9 @@ export default function Chat() {
   const socketRef = useRef<Socket | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // ✨ Cargar mensajes iniciales (más recientes)
+  // ✨ Cargar mensajes iniciales (más recientes) y scroll al final
   useEffect(() => {
     const loadInitialMessages = async () => {
       try {
@@ -36,6 +37,11 @@ export default function Chat() {
         setHasMore(allMessages.length > 30)
 
         console.log(`📨 Cargados ${recentMessages.length} mensajes iniciales`)
+
+        // ✨ Scroll al final después de cargar
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({behavior: "auto"})
+        }, 100)
       } catch (error) {
         console.error("❌ Error cargando historial:", error)
       } finally {
@@ -57,25 +63,21 @@ export default function Chat() {
       const response = await api.get("/api/chat/history")
       const allMessages = response.data as Message[]
 
-      // Encontrar el índice del mensaje más antiguo actual
       const oldestIndex = allMessages.findIndex((m) => m.id === oldestMessageId)
 
       if (oldestIndex > 0) {
-        // Cargar 20 mensajes anteriores
         const olderMessages = allMessages.slice(
           Math.max(0, oldestIndex - 20),
           oldestIndex
         )
 
         if (olderMessages.length > 0) {
-          // Guardar posición del scroll
           const container = messagesContainerRef.current
           const previousScrollHeight = container?.scrollHeight || 0
 
           setMessages((prev) => [...olderMessages, ...prev])
           setHasMore(oldestIndex > 20)
 
-          // ✨ Mantener posición visual (evitar "salto")
           setTimeout(() => {
             if (container) {
               const newScrollHeight = container.scrollHeight
@@ -105,13 +107,11 @@ export default function Chat() {
     const handleScroll = () => {
       const scrollTop = container.scrollTop
 
-      // Si está en el tope (primeros 100px), cargar más
       if (scrollTop < 100 && hasMore && !loadingMore) {
         loadOlderMessages()
       }
     }
 
-    // Throttle: ejecutar máximo cada 300ms
     let timeoutId: number | null = null
     const throttledScroll = () => {
       if (timeoutId) return
@@ -154,7 +154,6 @@ export default function Chat() {
 
     socket.on("chat:message", (msg: Message) => {
       setMessages((prev) => {
-        // Evitar duplicados
         if (prev.some((m) => m.id === msg.id)) return prev
         return [...prev, msg]
       })
@@ -165,7 +164,6 @@ export default function Chat() {
     }
   }, [])
 
-  // ✨ Enviar mensaje
   const send = () => {
     if (!user) return alert("Inicia sesión para publicar")
     if (!text.trim()) return
@@ -173,7 +171,6 @@ export default function Chat() {
     socketRef.current?.emit("chat:message", {text: text.trim()})
     setText("")
 
-    // Reset altura del textarea
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
@@ -188,10 +185,10 @@ export default function Chat() {
     const diffDays = Math.floor(diffHours / 24)
 
     if (diffMins < 1) return "Ahora"
-    if (diffMins < 60) return `Hace ${diffMins}m`
-    if (diffHours < 24) return `Hace ${diffHours}h`
+    if (diffMins < 60) return `${diffMins}m`
+    if (diffHours < 24) return `${diffHours}h`
     if (diffDays === 1) return "Ayer"
-    if (diffDays < 7) return `Hace ${diffDays}d`
+    if (diffDays < 7) return `${diffDays}d`
 
     return date.toLocaleDateString("es-ES", {
       day: "numeric",
@@ -201,10 +198,10 @@ export default function Chat() {
 
   if (initialLoad) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
+      <div className="h-full flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 text-sm">Cargando mensajes...</p>
+          <div className="w-10 h-10 border-3 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm font-medium">Cargando feed...</p>
         </div>
       </div>
     )
@@ -212,118 +209,105 @@ export default function Chat() {
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
-      {/* ✨ Header con estado de conexión */}
-      <div className="bg-white border-b px-4 py-3 flex-shrink-0 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="font-bold text-gray-900 text-lg">Muro Público</h1>
-            <p className="text-xs text-gray-500">
-              {messages.length} {messages.length === 1 ? "mensaje" : "mensajes"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
-              }`}></div>
-            <span className="text-xs text-gray-600">
-              {isConnected ? "En vivo" : "Desconectado"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ✨ Feed de mensajes estilo Twitter/Facebook */}
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto"
-        style={{scrollBehavior: "smooth"}}>
-        <div className="max-w-2xl mx-auto">
-          {/* Indicador de carga superior */}
-          {hasMore && (
-            <div className="py-4 text-center sticky top-0 bg-gray-50 z-10">
-              {loadingMore ? (
-                <div className="inline-flex items-center gap-2 text-gray-500 text-sm bg-white px-4 py-2 rounded-full shadow-sm">
-                  <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
-                  Cargando mensajes anteriores...
-                </div>
-              ) : (
-                <button
-                  onClick={loadOlderMessages}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium bg-white px-4 py-2 rounded-full shadow-sm hover:shadow-md transition-all">
-                  ↑ Ver mensajes anteriores
-                </button>
-              )}
+      {/* ✨ Feed principal - Diseño centrado estilo Twitter */}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto">
+        {/* Container centrado */}
+        <div className="max-w-3xl mx-auto bg-white min-h-full border-x border-gray-200">
+          {/* Header sticky */}
+          <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-gray-200">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div>
+                <h1 className="font-bold text-gray-900 text-xl">Inicio</h1>
+              </div>
+              <div className="flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-full">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
+                  }`}></div>
+                <span className="text-xs font-medium text-green-700">
+                  {isConnected ? "En vivo" : "Desconectado"}
+                </span>
+              </div>
             </div>
-          )}
+          </div>
 
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 px-4">
-              <div className="text-6xl mb-4">💬</div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
-                ¡Sé el primero en publicar!
-              </h2>
-              <p className="text-gray-600 text-center max-w-sm">
-                Comparte tus pensamientos con la comunidad
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {messages.map((m) => {
-                const isOwnMessage = user && m.user.id === user.id
-                return (
-                  <article
-                    key={m.id}
-                    className="bg-white hover:bg-gray-50 transition-colors px-4 py-4">
-                    <div className="flex gap-3">
-                      {/* Avatar */}
-                      <img
-                        src={m.user.avatarUrl || "https://placehold.co/48"}
-                        className="w-12 h-12 rounded-full flex-shrink-0 border-2 border-gray-100"
-                        alt={m.user.name}
-                      />
+          {/* ✨ Composer - Siempre visible arriba */}
+          {user && (
+            <div className="border-b border-gray-200 bg-white sticky top-[57px] z-10">
+              <div className="px-4 py-4">
+                <div className="flex gap-3">
+                  <img
+                    src={user.avatarUrl || "https://placehold.co/48"}
+                    className="w-12 h-12 rounded-full flex-shrink-0 ring-2 ring-gray-100"
+                    alt={user.name}
+                  />
 
-                      {/* Contenido */}
-                      <div className="flex-1 min-w-0">
-                        {/* Header del post */}
-                        <div className="flex items-center gap-2 mb-1">
+                  <div className="flex-1">
+                    <textarea
+                      ref={textareaRef}
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault()
+                          send()
+                        }
+                      }}
+                      placeholder="¿Qué está pasando?"
+                      disabled={!isConnected}
+                      rows={1}
+                      className="w-full px-0 py-2 text-gray-900 text-lg placeholder-gray-500 border-0 focus:outline-none focus:ring-0 disabled:opacity-50 resize-none bg-transparent"
+                      style={{
+                        minHeight: "42px",
+                        maxHeight: "200px"
+                      }}
+                      onInput={(e) => {
+                        const target = e.target as HTMLTextAreaElement
+                        target.style.height = "auto"
+                        target.style.height =
+                          Math.min(target.scrollHeight, 200) + "px"
+                      }}
+                      maxLength={500}
+                    />
+
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-2">
+                      <div className="text-xs text-gray-500">
+                        {text.length > 0 && (
                           <span
-                            className={`font-semibold text-gray-900 text-sm truncate ${
-                              isOwnMessage ? "text-blue-600" : ""
-                            }`}>
-                            {isOwnMessage ? "Tú" : m.user.name}
+                            className={
+                              text.length > 450
+                                ? "text-orange-600 font-semibold"
+                                : ""
+                            }>
+                            {text.length}/500
                           </span>
-                          <span className="text-gray-400 text-sm">·</span>
-                          <time className="text-gray-500 text-sm flex-shrink-0">
-                            {formatTime(m.createdAt)}
-                          </time>
-                        </div>
-
-                        {/* Mensaje */}
-                        <p className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {m.text}
-                        </p>
+                        )}
                       </div>
+                      <button
+                        onClick={send}
+                        disabled={!text.trim() || !isConnected}
+                        className="px-6 py-2 bg-blue-600 text-white text-sm font-semibold rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm disabled:shadow-none">
+                        Publicar
+                      </button>
                     </div>
-                  </article>
-                )
-              })}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* ✨ Composer estilo Twitter/Facebook */}
-      <div className="bg-white border-t shadow-lg flex-shrink-0 sticky bottom-0">
-        <div className="max-w-2xl mx-auto px-4 py-3">
-          {!user ? (
-            <div className="text-center py-2">
-              <p className="text-gray-600 text-sm mb-3">
-                Inicia sesión para participar en la conversación
+          {/* Login prompt */}
+          {!user && (
+            <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 text-center">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                Únete a la conversación
+              </h3>
+              <p className="text-gray-600 text-sm mb-4">
+                Inicia sesión para publicar y conectar con la comunidad
               </p>
               <a
                 href={`${import.meta.env.VITE_API_URL}/auth/google`}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg">
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-full hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg">
                 <svg
                   className="w-5 h-5"
                   viewBox="0 0 24 24"
@@ -333,84 +317,148 @@ export default function Chat() {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
-                Iniciar sesión
+                Iniciar sesión con Google
               </a>
             </div>
-          ) : (
-            <div className="flex gap-3">
-              {/* Avatar del usuario */}
-              <img
-                src={user.avatarUrl || "https://placehold.co/40"}
-                className="w-10 h-10 rounded-full flex-shrink-0 border-2 border-gray-200"
-                alt={user.name}
-              />
+          )}
 
-              {/* Input expandible */}
-              <div className="flex-1 flex gap-2">
-                <textarea
-                  ref={textareaRef}
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      send()
-                    }
-                  }}
-                  placeholder="¿Qué estás pensando?"
-                  disabled={!isConnected}
-                  rows={1}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white disabled:opacity-50 resize-none text-sm"
-                  style={{
-                    minHeight: "42px",
-                    maxHeight: "120px"
-                  }}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement
-                    target.style.height = "auto"
-                    target.style.height =
-                      Math.min(target.scrollHeight, 120) + "px"
-                  }}
-                  maxLength={500}
-                />
-
-                {/* Botón de envío */}
+          {/* Indicador de carga superior */}
+          {hasMore && messages.length > 0 && (
+            <div className="py-4 text-center border-b border-gray-100">
+              {loadingMore ? (
+                <div className="inline-flex items-center gap-2 text-gray-500 text-sm">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                  Cargando anteriores...
+                </div>
+              ) : (
                 <button
-                  onClick={send}
-                  disabled={!text.trim() || !isConnected}
-                  className="p-2.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0 shadow-md hover:shadow-lg active:scale-95"
-                  title="Publicar (Enter)">
-                  <svg
-                    className="w-5 h-5"
-                    fill="currentColor"
-                    viewBox="0 0 24 24">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                  </svg>
+                  onClick={loadOlderMessages}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium hover:underline">
+                  Cargar mensajes anteriores
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <svg
+                  className="w-10 h-10 text-blue-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                  />
+                </svg>
               </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Bienvenido al feed
+              </h2>
+              <p className="text-gray-600 text-center max-w-sm">
+                Cuando alguien publique, sus mensajes aparecerán aquí
+              </p>
             </div>
-          )}
+          ) : (
+            /* ✨ Feed de mensajes */
+            <div>
+              {messages.map((m) => {
+                const isOwnMessage = user && m.user.id === user.id
+                return (
+                  <article
+                    key={m.id}
+                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <div className="px-4 py-3 flex gap-3">
+                      {/* Avatar */}
+                      <img
+                        src={m.user.avatarUrl || "https://placehold.co/48"}
+                        className="w-12 h-12 rounded-full flex-shrink-0 ring-2 ring-gray-100"
+                        alt={m.user.name}
+                      />
 
-          {/* Contador de caracteres */}
-          {user && text.length > 400 && (
-            <div className="text-right mt-2">
-              <span
-                className={`text-xs ${
-                  text.length > 480
-                    ? "text-red-600 font-semibold"
-                    : "text-gray-500"
-                }`}>
-                {text.length}/500
-              </span>
-            </div>
-          )}
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        {/* Header */}
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span
+                            className={`font-bold text-gray-900 text-[15px] hover:underline truncate ${
+                              isOwnMessage ? "text-blue-600" : ""
+                            }`}>
+                            {isOwnMessage ? "Tú" : m.user.name}
+                          </span>
+                          <span className="text-gray-500 text-sm flex-shrink-0">
+                            · {formatTime(m.createdAt)}
+                          </span>
+                        </div>
 
-          {/* Estado sin conexión */}
-          {!isConnected && user && (
-            <div className="text-center mt-2">
-              <span className="text-xs text-red-600 bg-red-50 px-3 py-1 rounded-full">
-                Sin conexión • Reconectando...
-              </span>
+                        {/* Message */}
+                        <p className="text-gray-900 text-[15px] leading-normal whitespace-pre-wrap break-words">
+                          {m.text}
+                        </p>
+
+                        {/* Actions (placeholder para futuras interacciones) */}
+                        <div className="flex items-center gap-8 mt-3 text-gray-500">
+                          <button className="flex items-center gap-1.5 hover:text-blue-600 transition-colors group">
+                            <div className="w-8 h-8 rounded-full group-hover:bg-blue-50 flex items-center justify-center transition-colors">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                />
+                              </svg>
+                            </div>
+                          </button>
+
+                          <button className="flex items-center gap-1.5 hover:text-green-600 transition-colors group">
+                            <div className="w-8 h-8 rounded-full group-hover:bg-green-50 flex items-center justify-center transition-colors">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                />
+                              </svg>
+                            </div>
+                          </button>
+
+                          <button className="flex items-center gap-1.5 hover:text-pink-600 transition-colors group">
+                            <div className="w-8 h-8 rounded-full group-hover:bg-pink-50 flex items-center justify-center transition-colors">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                                />
+                              </svg>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           )}
         </div>
