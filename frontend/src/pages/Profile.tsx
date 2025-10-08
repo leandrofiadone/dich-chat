@@ -1,3 +1,7 @@
+import {formatRelativeTime, formatTime} from "../utils/format"
+
+
+
 import Header from "../components/Header"
 import AuthGuard from "../components/AuthGard"
 import {useEffect, useState} from "react"
@@ -15,6 +19,7 @@ export default function Profile() {
   // Cargar datos del usuario cuando esté disponible
   useEffect(() => {
     if (user) {
+
       console.log("👤 Usuario cargado en Profile:", user)
       setBio(user.bio || "")
       setAvatarUrl(user.avatarUrl || "")

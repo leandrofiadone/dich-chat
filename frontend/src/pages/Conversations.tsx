@@ -1,29 +1,12 @@
+// frontend/src/pages/Conversations.tsx
 import {useEffect, useState, useRef} from "react"
 import {useNavigate} from "react-router-dom"
 import {useMe} from "../hooks/useMe"
+import {useDebounce} from "../hooks/useDebounce"
+import {formatRelativeTime} from "../utils/format"
 import api from "../lib/api"
 import Header from "../components/Header"
-
-type User = {
-  id: string
-  name: string
-  email: string
-  avatarUrl?: string
-  bio?: string
-}
-
-type Conversation = {
-  id: string
-  participantIds: string[]
-  lastMessageAt: string
-  participants: User[]
-  messages?: Array<{
-    text: string
-    createdAt: string
-    sender: User
-  }>
-  unreadCount?: number // ⭐ Nuevo campo
-}
+import type {User, Conversation} from "../types"
 
 export default function Conversations() {
   const {user, loading: authLoading} = useMe()
@@ -39,12 +22,14 @@ export default function Conversations() {
   const [searching, setSearching] = useState(false)
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
 
+  // ✨ NUEVO: Debounce del query de búsqueda
+  const debouncedQuery = useDebounce(searchQuery, 300)
+
   // Estado de creación
   const [creatingWith, setCreatingWith] = useState<string | null>(null)
 
   // Referencias
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const searchDebounceRef = useRef<number>()
 
   // Cargar conversaciones existentes y refrescar al volver de un chat
   useEffect(() => {
@@ -73,25 +58,20 @@ export default function Conversations() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [user])
 
-  // Búsqueda con debounce
+  // ✨ MODIFICADO: Búsqueda con debounce
   useEffect(() => {
-    // Limpiar timeout anterior
-    if (searchDebounceRef.current) {
-      window.clearTimeout(searchDebounceRef.current)
-    }
-
     // Si no hay query, limpiar resultados
-    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+    if (!debouncedQuery.trim() || debouncedQuery.trim().length < 2) {
       setSearchResults([])
       setShowSearchDropdown(false)
       return
     }
 
-    // Buscar después de 300ms
-    setSearching(true)
-    searchDebounceRef.current = window.setTimeout(async () => {
+    // Buscar con el query debounced
+    const searchUsers = async () => {
+      setSearching(true)
       try {
-        const response = await api.get(`/api/users/search?q=${searchQuery}`)
+        const response = await api.get(`/api/users/search?q=${debouncedQuery}`)
         setSearchResults(response.data)
         setShowSearchDropdown(true)
         console.log(`🔍 Encontrados ${response.data.length} usuarios`)
@@ -101,14 +81,10 @@ export default function Conversations() {
       } finally {
         setSearching(false)
       }
-    }, 300)
-
-    return () => {
-      if (searchDebounceRef.current) {
-        window.clearTimeout(searchDebounceRef.current)
-      }
     }
-  }, [searchQuery])
+
+    searchUsers()
+  }, [debouncedQuery]) // ✨ Ahora depende del debouncedQuery en vez de searchQuery
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -147,6 +123,8 @@ export default function Conversations() {
           id: response.data.conversation.id,
           participantIds: response.data.conversation.participantIds,
           lastMessageAt: response.data.conversation.lastMessageAt,
+          createdAt: response.data.conversation.createdAt,
+          updatedAt: response.data.conversation.updatedAt,
           participants: response.data.participants,
           messages: []
         }
@@ -164,23 +142,6 @@ export default function Conversations() {
     } finally {
       setCreatingWith(null)
     }
-  }
-
-  // Formatear timestamp relativo
-  const formatRelativeTime = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffMins < 1) return "Ahora"
-    if (diffMins < 60) return `Hace ${diffMins}m`
-    if (diffHours < 24) return `Hace ${diffHours}h`
-    if (diffDays === 1) return "Ayer"
-    if (diffDays < 7) return `Hace ${diffDays}d`
-    return date.toLocaleDateString("es-ES", {day: "2-digit", month: "short"})
   }
 
   if (authLoading) {
@@ -259,6 +220,7 @@ export default function Conversations() {
                 placeholder="Buscar usuarios por nombre o email..."
                 className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+              {/* ✨ NUEVO: Indicador de búsqueda activa */}
               {searching && (
                 <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
                   <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
@@ -318,7 +280,7 @@ export default function Conversations() {
             {showSearchDropdown &&
               searchResults.length === 0 &&
               !searching &&
-              searchQuery.length >= 2 && (
+              debouncedQuery.length >= 2 && (
                 <div className="absolute z-10 w-full mt-2 bg-white rounded-lg border border-gray-200 shadow-lg p-4 text-center">
                   <div className="text-gray-400 mb-2">🔍</div>
                   <p className="text-sm text-gray-600">
@@ -333,6 +295,12 @@ export default function Conversations() {
 
           <p className="text-xs text-gray-500 mt-2">
             💡 Escribe al menos 2 caracteres para buscar
+            {/* ✨ NUEVO: Indicador de debounce en acción */}
+            {searchQuery !== debouncedQuery && searchQuery.length >= 2 && (
+              <span className="ml-2 text-blue-600">
+                (buscando en {300}ms...)
+              </span>
+            )}
           </p>
         </div>
 
