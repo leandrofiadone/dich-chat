@@ -1,130 +1,180 @@
 import {formatRelativeTime, formatTime} from "../utils/format"
-
-
-
 import Header from "../components/Header"
 import AuthGuard from "../components/AuthGard"
 import {useEffect, useState} from "react"
 import {useMe} from "../hooks/useMe"
 import api from "../lib/api"
+import {Button} from "@/components/ui/button"
+import {Avatar, AvatarImage, AvatarFallback} from "@/components/ui/avatar"
+import {Badge} from "@/components/ui/badge"
+import {getInitials} from "../utils/format"
+
+// ✨ NUEVO: Toast simple para notificaciones
+const Toast = ({
+  message,
+  type,
+  onClose
+}: {
+  message: string
+  type: "success" | "error" | "warning"
+  onClose: () => void
+}) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  const styles = {
+    success: "bg-green-600 border-green-700",
+    error: "bg-red-600 border-red-700",
+    warning: "bg-yellow-600 border-yellow-700"
+  }
+
+  return (
+    <div
+      className={`fixed bottom-4 right-4 ${styles[type]} text-white px-6 py-4 rounded-lg shadow-2xl border-2 flex items-center gap-3 animate-in slide-in-from-bottom-5 z-50 max-w-md`}>
+      <span className="text-2xl">
+        {type === "success" ? "✅" : type === "error" ? "❌" : "⚠️"}
+      </span>
+      <p className="flex-1 text-sm font-medium">{message}</p>
+      <button
+        onClick={onClose}
+        className="hover:bg-white/20 rounded p-1 transition-colors">
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+    </div>
+  )
+}
 
 export default function Profile() {
-  const {user, loading: userLoading} = useMe()
+  const {user, loading: userLoading, refreshUser} = useMe()
   const [bio, setBio] = useState("")
   const [avatarUrl, setAvatarUrl] = useState("")
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState("")
-  const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [toast, setToast] = useState<{
+    message: string
+    type: "success" | "error" | "warning"
+  } | null>(null)
+
+  // ✨ NUEVO: Estado para validaciones
+  const [avatarError, setAvatarError] = useState(false)
 
   // Cargar datos del usuario cuando esté disponible
   useEffect(() => {
     if (user) {
-
       console.log("👤 Usuario cargado en Profile:", user)
       setBio(user.bio || "")
       setAvatarUrl(user.avatarUrl || "")
     }
   }, [user])
 
-  // 🧪 Función de debug (solo en desarrollo)
-  const loadDebugInfo = async () => {
-    if (import.meta.env.PROD) return
-
-    try {
-      const response = await api.get("/api/users/debug/me")
-      setDebugInfo(response.data)
-      console.log("🔍 Debug info:", response.data)
-    } catch (error) {
-      console.error("❌ Error cargando debug info:", error)
+  // ✨ NUEVO: Validar URL de avatar en tiempo real
+  useEffect(() => {
+    if (!avatarUrl.trim()) {
+      setAvatarError(false)
+      return
     }
-  }
+
+    const img = new Image()
+    img.onload = () => setAvatarError(false)
+    img.onerror = () => setAvatarError(true)
+    img.src = avatarUrl
+  }, [avatarUrl])
+
+  // ✨ NUEVO: Advertir antes de salir con cambios sin guardar
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault()
+        e.returnValue = ""
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [bio, avatarUrl, user])
 
   const save = async () => {
     if (!user) {
-      setMessage("❌ Usuario no disponible")
+      setToast({
+        message: "Usuario no disponible. Intenta recargar la página.",
+        type: "error"
+      })
       return
     }
 
     setSaving(true)
-    setMessage("")
 
     try {
       console.log("\n💾 === GUARDANDO PERFIL ===")
-      console.log("👤 Usuario actual:", user.email)
-      console.log("📝 Bio original:", `"${user.bio}"`)
-      console.log("📝 Bio nueva:", `"${bio}"`)
-      console.log("🖼️ Avatar original:", `"${user.avatarUrl}"`)
-      console.log("🖼️ Avatar nuevo:", `"${avatarUrl}"`)
 
       // Preparar payload (solo enviar lo que cambió)
       const payload: any = {}
 
       if (bio.trim() !== (user.bio || "")) {
         payload.bio = bio.trim() || null
-        console.log("✏️ Bio cambió, incluyendo en payload")
       }
 
       if (avatarUrl.trim() !== (user.avatarUrl || "")) {
         payload.avatarUrl = avatarUrl.trim() || null
-        console.log("🖼️ Avatar cambió, incluyendo en payload")
       }
 
-      console.log("📦 Payload final:", JSON.stringify(payload, null, 2))
-
       if (Object.keys(payload).length === 0) {
-        setMessage("⚠️ No hay cambios para guardar")
-        console.log("⚠️ No hay cambios detectados")
+        setToast({
+          message: "No hay cambios para guardar",
+          type: "warning"
+        })
         return
       }
 
-      console.log("🚀 Enviando request a /api/users/me...")
-
       const response = await api.put("/api/users/me", payload)
 
-      console.log("✅ Respuesta del servidor:", response.data)
-
       if (response.data.success) {
-        setMessage("✅ Perfil actualizado correctamente")
-        console.log("🎉 Perfil guardado exitosamente")
+        setToast({
+          message: "¡Perfil actualizado correctamente!",
+          type: "success"
+        })
 
-        // Recargar debug info si está disponible
-        if (!import.meta.env.PROD) {
-          setTimeout(loadDebugInfo, 1000)
-        }
-
-        // Opcional: recargar después de 3 segundos para sincronizar estado
-        setTimeout(() => {
-          window.location.reload()
-        }, 3000)
+        // ✨ SOLUCIÓN: Usar refreshUser en vez de window.location.reload()
+        console.log("🔄 Refrescando datos del usuario...")
+        await refreshUser()
+        console.log("✅ Usuario refrescado exitosamente")
       } else {
         throw new Error("Respuesta inesperada del servidor")
       }
     } catch (error: any) {
       console.error("❌ Error actualizando perfil:", error)
-      console.error("📊 Error completo:", {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
-      })
 
       if (error.response?.status === 401) {
-        setMessage("❌ Sesión expirada. Recargando...")
+        setToast({
+          message: "Sesión expirada. Redirigiendo...",
+          type: "error"
+        })
         setTimeout(() => {
           window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`
         }, 2000)
       } else if (error.response?.status === 400) {
         const errorMsg = error.response?.data?.message || "Datos inválidos"
-        setMessage(`❌ ${errorMsg}`)
-      } else if (error.response?.status === 500) {
-        const errorMsg = error.response?.data?.message || "Error del servidor"
-        setMessage(`❌ Error del servidor: ${errorMsg}`)
+        setToast({message: errorMsg, type: "error"})
       } else {
-        setMessage("❌ Error desconocido al actualizar el perfil")
+        setToast({
+          message: "Error al actualizar el perfil. Intenta de nuevo.",
+          type: "error"
+        })
       }
     } finally {
       setSaving(false)
-      // Limpiar mensaje después de 8 segundos
-      setTimeout(() => setMessage(""), 8000)
       console.log("===============================\n")
     }
   }
@@ -135,173 +185,312 @@ export default function Profile() {
     (bio.trim() !== (user.bio || "").trim() ||
       avatarUrl.trim() !== (user.avatarUrl || "").trim())
 
+  // ✨ NUEVO: Calcular progreso de bio
+  const bioProgress = (bio.length / 500) * 100
+  const bioColorClass =
+    bio.length > 450
+      ? "text-red-600"
+      : bio.length > 350
+      ? "text-yellow-600"
+      : "text-gray-500"
+
   return (
     <AuthGuard requireAuth={true}>
       <div
-        className="flex flex-col bg-gray-50 overflow-hidden"
+        className="flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden"
         style={{height: "100dvh"}}>
         <Header />
 
         <main className="flex-1 overflow-y-auto min-h-0">
-          <div className="max-w-2xl mx-auto p-4 space-y-6">
-            <div className="flex items-center justify-between">
+          <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
+            {/* ✨ Header mejorado */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">
+                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
                   Mi Perfil
+                  {hasChanges && (
+                    <Badge variant="default" className="animate-pulse">
+                      Sin guardar
+                    </Badge>
+                  )}
                 </h1>
-                <p className="text-gray-600 text-sm">
-                  Personaliza tu información
+                <p className="text-gray-600 text-sm mt-1">
+                  Personaliza tu información pública
                 </p>
               </div>
 
-              {/* Debug button (solo en desarrollo) */}
-              {!import.meta.env.PROD && (
-                <button
-                  onClick={loadDebugInfo}
-                  className="px-3 py-1 bg-yellow-500 text-white text-xs rounded">
-                  Debug
-                </button>
+              {/* Quick actions */}
+              {hasChanges && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBio(user?.bio || "")
+                      setAvatarUrl(user?.avatarUrl || "")
+                      setToast({
+                        message: "Cambios descartados",
+                        type: "warning"
+                      })
+                    }}
+                    disabled={saving}>
+                    Descartar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={save}
+                    disabled={saving || avatarError}
+                    className="min-w-[100px]">
+                    {saving ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                        Guardando
+                      </>
+                    ) : (
+                      "Guardar"
+                    )}
+                  </Button>
+                </div>
               )}
             </div>
 
-            <div className="space-y-6">
-              {message && (
-                <div
-                  className={`p-4 rounded-lg text-sm transition-all duration-300 border ${
-                    message.includes("✅")
-                      ? "bg-green-50 text-green-700 border-green-200"
-                      : message.includes("⚠️")
-                      ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                      : "bg-red-50 text-red-700 border-red-200"
-                  }`}>
-                  {message}
-                </div>
-              )}
-
-              <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6 hover:shadow-md transition-shadow">
-                {/* Current user info */}
-                <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
-                  <img
-                    src={user?.avatarUrl || "https://placehold.co/50"}
-                    className="w-12 h-12 rounded-full transition-transform hover:scale-105"
-                    alt={user?.name}
-                  />
-                  <div>
-                    <h2 className="font-semibold text-gray-900">
-                      {user?.name}
-                    </h2>
-                    <p className="text-gray-600 text-sm break-all">
-                      {user?.email}
-                    </p>
-                    {user && (
-                      <p className="text-xs text-gray-400">ID: {user.id}</p>
+            {/* ✨ Card principal con mejor diseño */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {/* Header del card con avatar grande */}
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 h-24 relative">
+                <div className="absolute -bottom-12 left-6">
+                  <div className="relative">
+                    <Avatar className="h-24 w-24 border-4 border-white shadow-xl ring-2 ring-blue-100">
+                      <AvatarImage
+                        src={avatarUrl || user?.avatarUrl}
+                        alt={user?.name}
+                      />
+                      <AvatarFallback className="text-2xl bg-gradient-to-br from-blue-400 to-purple-400 text-white">
+                        {user?.name ? getInitials(user.name) : "??"}
+                      </AvatarFallback>
+                    </Avatar>
+                    {avatarError && avatarUrl && (
+                      <div className="absolute -bottom-2 -right-2 bg-red-500 text-white rounded-full p-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
                     )}
                   </div>
                 </div>
+              </div>
 
-                {/* Avatar section */}
+              {/* Contenido del card */}
+              <div className="pt-16 px-6 pb-6 space-y-8">
+                {/* Info básica */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Foto de perfil
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={
-                        avatarUrl ||
-                        user?.avatarUrl ||
-                        "https://placehold.co/60"
-                      }
-                      className="w-12 h-12 rounded-full transition-transform hover:scale-110 border-2 border-gray-200"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://placehold.co/60"
-                      }}
-                      alt="Preview"
-                    />
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {user?.name}
+                  </h2>
+                  <p className="text-gray-600 mt-1">{user?.email}</p>
+                  <div className="flex gap-2 mt-2">
+                    <Badge variant="secondary" className="text-xs">
+                      ID: {user?.id.slice(0, 8)}...
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="text-xs border-green-200 text-green-700">
+                      Cuenta activa
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100"></div>
+
+                {/* ✨ Sección Avatar URL */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-gray-900">
+                      URL de foto de perfil
+                    </label>
+                    {avatarUrl && (
+                      <Badge
+                        variant={avatarError ? "destructive" : "default"}
+                        className="text-xs">
+                        {avatarError ? "❌ URL inválida" : "✅ Válida"}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
                     <input
                       type="url"
                       placeholder="https://ejemplo.com/avatar.jpg"
                       value={avatarUrl}
                       onChange={(e) => setAvatarUrl(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                      className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-all ${
+                        avatarError && avatarUrl
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
+                          : "border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                      }`}
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    URL de tu imagen de perfil (opcional)
+                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                    <svg
+                      className="w-3 h-3"
+                      fill="currentColor"
+                      viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    La imagen se valida automáticamente
                   </p>
                 </div>
 
-                {/* Bio section */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Biografía
+                <div className="border-t border-gray-100"></div>
+
+                {/* ✨ Sección Bio mejorada */}
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold text-gray-900 flex items-center justify-between">
+                    <span>Biografía</span>
+                    <span className={`text-xs font-mono ${bioColorClass}`}>
+                      {bio.length}/500
+                    </span>
                   </label>
                   <textarea
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     rows={4}
                     maxLength={500}
-                    placeholder="Cuéntanos algo sobre ti..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
+                    placeholder="Cuéntanos sobre ti, tus intereses, profesión..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
                   />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Comparte tus intereses o profesión</span>
-                    <span className={bio.length > 450 ? "text-amber-600" : ""}>
-                      {bio.length}/500
-                    </span>
+                  {/* Barra de progreso visual */}
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        bio.length > 450
+                          ? "bg-red-500"
+                          : bio.length > 350
+                          ? "bg-yellow-500"
+                          : "bg-blue-500"
+                      }`}
+                      style={{width: `${bioProgress}%`}}></div>
                   </div>
+                  <p className="text-xs text-gray-500">
+                    Una buena bio ayuda a otros usuarios a conocerte mejor
+                  </p>
                 </div>
 
-                {/* Change indicator */}
+                {/* ✨ Acciones con mejor UX */}
                 {hasChanges && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-                    ⚡ Hay cambios sin guardar
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+                    <div className="bg-blue-100 rounded-full p-2">
+                      <svg
+                        className="w-5 h-5 text-blue-600"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-900">
+                        Tienes cambios sin guardar
+                      </p>
+                      <p className="text-xs text-blue-700 mt-0.5">
+                        No olvides guardar antes de salir de esta página
+                      </p>
+                    </div>
                   </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <button
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+                  <Button
+                    variant="outline"
                     onClick={() => {
                       setBio(user?.bio || "")
                       setAvatarUrl(user?.avatarUrl || "")
-                      setMessage("")
+                      setToast({
+                        message: "Cambios restaurados",
+                        type: "warning"
+                      })
                     }}
                     disabled={saving || !hasChanges}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Restaurar
-                  </button>
+                    className="sm:flex-1">
+                    Restaurar original
+                  </Button>
 
-                  <button
+                  <Button
                     onClick={save}
-                    disabled={saving || !user || !hasChanges}
-                    className="px-6 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+                    disabled={saving || !user || !hasChanges || avatarError}
+                    className="sm:flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
                     {saving ? (
                       <>
-                        <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin"></div>
-                        Guardando...
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                        Guardando cambios...
                       </>
                     ) : (
-                      "Guardar cambios"
+                      <>
+                        <svg
+                          className="w-4 h-4 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                        Guardar cambios
+                      </>
                     )}
-                  </button>
+                  </Button>
                 </div>
               </div>
+            </div>
 
-              {/* Debug info (solo en desarrollo) */}
-              {!import.meta.env.PROD && debugInfo && (
-                <div className="bg-gray-800 text-gray-200 rounded-lg p-4 text-xs font-mono">
-                  <h3 className="text-yellow-400 mb-2">
-                    🔍 Debug Information:
-                  </h3>
-                  <pre className="whitespace-pre-wrap overflow-x-auto">
-                    {JSON.stringify(debugInfo, null, 2)}
-                  </pre>
-                </div>
-              )}
+            {/* ✨ Info adicional */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                💡 Consejos para tu perfil
+              </h3>
+              <ul className="text-xs text-gray-600 space-y-1">
+                <li>
+                  • Usa una foto clara donde se te vea bien para mayor confianza
+                </li>
+                <li>
+                  • Tu bio aparecerá en búsquedas y conversaciones con otros
+                  usuarios
+                </li>
+                <li>
+                  • Puedes cambiar tu información cuando quieras desde aquí
+                </li>
+              </ul>
             </div>
           </div>
         </main>
       </div>
+
+      {/* ✨ Toast notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </AuthGuard>
   )
 }
